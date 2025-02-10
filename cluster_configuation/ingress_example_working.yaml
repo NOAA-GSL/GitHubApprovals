@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+  name: githubapprovals-ingress
+  namespace: gitauth
+spec:
+  rules:
+    - host: apps-dev.gsd.esrl.noaa.gov
+      http:
+        paths:
+          - path: /githubapprovals/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: githubuserauthcontainer
+                port:
+                  number: 80
+          - path: /static/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: githubuserauthcontainer
+                port:
+                  number: 80
+          - path: /images/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: githubuserauthcontainer
+                port:
+                  number: 80

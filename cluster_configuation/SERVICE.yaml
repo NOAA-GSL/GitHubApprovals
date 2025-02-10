@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: githubuserauthcontainer
+  namespace: gitauth
+  labels:
+    app: githubuserauthcontainer
+spec:
+  selector:
+    app: githubuserauthcontainer
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP

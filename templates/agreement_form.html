@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Agreement Form</title>
+    <style>
+        body {
+            background-image: url('/githubapprovals/images/background.png');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            background-position: center 1px;
+        }
+        
+        #agreementForm {
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 600px;
+            margin: auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        input[type="text"], input[type="email"], select, button {
+            display: block;
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        
+        .checkbox-container {
+            text-align: left;
+        }
+        
+        .checkbox-container div {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .checkbox-container input[type="checkbox"] {
+            margin-right: 10px;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        h1 { 
+            text-align: center; 
+            font-size: 64px; 
+            font-weight: bold; 
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <h1>GSL's GitHub Request Form</h1>
+    <form id="agreementForm">
+        <input type="email" name="email" placeholder="Email" required>
+        <input type="text" name="first_name" placeholder="First Name" required>
+        <input type="text" name="last_name" placeholder="Last Name" required>
+        
+        <label for="esrl_lab">ESRL Laboratory:</label>
+        <select name="esrl_lab" required>
+            <option value="gsl">GSL</option>
+            <option value="psl">PSL</option>
+            <!-- Add other labs as needed -->
+        </select>
+        
+        <label for="role">Role:</label>
+        <select name="role" required>
+            <option value="member">Member</option>
+        </select>
+
+        <label for="sponsor">Sponsor:</label>
+        <select name="sponsor" required>
+            <option value="jennifer.mahoney@noaa.gov">Jennifer Mahoney</option>
+            <option value="dave.turner@noaa.gov">Dave Turner</option>
+            <option value="curtis.alexander@noaa.gov">Curtis Alexander</option>
+            <option value="stephen.weygandt@noaa.gov">Steve Weygandt</option>
+            <option value="melissa.a.petty@noaa.gov">Melissa Petty</option>
+            <option value="ligia.bernardet@noaa.gov">Ligia Bernardet</option>
+            <option value="dan.nietfeld@noaa.gov">Dan Nietfeld</option>
+            <option value="scott.nahman@noaa.gov">Scott Nahman</option>
+            <option value="renn.valo@noaa.gov">Renn Valo test Sponsor</option>
+        </select>
+
+        <div class="checkbox-container">
+            <div>
+                <input type="checkbox" name="requirement1" id="requirement1" required>
+                <label for="requirement1">
+                    <a href="https://docs.google.com/document/d/1RpJN1kbkheUj5SQCjN4Ta4SWBgrV1uHD/edit" target="_blank">
+                        Read and understand GSL's GitHub Usage Policy
+                    </a>
+                    <p></p>
+                </label>
+            </div>
+            <div>
+                <input type="checkbox" name="requirement2" id="requirement2" required>
+                <label for="requirement2"> Create a GitHub account using your NOAA email address</label>
+                <p></p>
+            </div>
+            <div>
+                <input type="checkbox" name="requirement3" id="requirement3" required>
+                <label for="requirement1">
+                    <a href="https://sites.google.com/noaa.gov/gsl-staff-resources/its/yubikey-guidance" target="_blank">
+                        Use two factor authentication with your GSL accounts
+                    </a>
+                    <p></p>
+                    <a href="https://docs.github.com/en/authentication/securing-your-account-with-two-factor-authentication-2fa" target="_blank">
+                        Enable two factor authentication on your GitHub account
+                    </a>
+                </label>
+            </div>
+        
+        <button type="submit">Submit</button>
+    </form>
+    
+    <div id="message"></div>
+
+    <script>
+        document.getElementById('agreementForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const data = new URLSearchParams(formData);
+
+            try {
+                const response = await fetch('/githubapprovals/submit_agreement/', {
+                    method: 'POST',
+                    body: data
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    document.getElementById('message').innerText = result.message;
+                } else {
+                    document.getElementById('message').innerText = result.detail;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('message').innerText = `An error occurred. Please try again later. Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>

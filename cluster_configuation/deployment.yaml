@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:  
+  name: githubuserauthcontainer
+  namespace: gitauth
+  lables:
+    app: githubuserauthcontainer    
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: githubuserauthcontainer
+  template:
+    metadata:
+      labels:
+        app: githubuserauthcontainer
+    spec:
+      containers:
+        - image: ghcr.io/noaa-gsl/githubapprovals/approvals-container-ghcr:latest
+          imagePullPolicy: Always
+          name: githubuserauthcontainer
+          ports:
+            - containerPort: 8000
+              name: githubapprovals
+              protocol: TCP
+          resources:
+            limits:
+              cpu: '1'
+              memory: 128Mi
+            requests:
+              cpu: '1'
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+          volumeMounts:
+            - mountPath: /data
+              name: vol-poq39
+      imagePullSecrets:
+        - name: githubuserauth
+      volumes:
+        - name: vol-poq39
+          persistentVolumeClaim:
+            claimName: githubuserauth-data
