@@ -443,7 +443,15 @@ def download_agreements():
         'Approval Token2': ag.approval_token2,
         'Approval Token3': ag.approval_token3,
         'Approval Token4': ag.approval_token4,
-        'last_renewal_date': ag.last_renewal_date
+        'last_renewal_date': ag.last_renewal_date,
+        'Approver Email1': ag.approver_email1,
+        'Approver Email2': ag.approver_email2,
+        'Approver Email3': ag.approver_email3,
+        'Approver Email4': ag.approver_email4,
+        'Disapprover Email1': ag.disapprover_email1,
+        'Disapprover Email2': ag.disapprover_email2,
+        'Disapprover Email3': ag.disapprover_email3,
+        'Disapprover Email4': ag.disapprover_email4
 
     } for ag in agreements])
 
