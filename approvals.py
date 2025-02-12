@@ -21,6 +21,10 @@ import logging
 from pydantic import BaseModel
 import pandas as pd
 
+# Define stakeholders globally  -changing this will change who gets contacted.
+def get_stakeholders(sponsor):
+    return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor]
+
 #app = FastAPI()
 app = FastAPI(root_path="https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/")
 
@@ -86,7 +90,15 @@ class UserAgreement(Base):
     approval_token2 = Column(Text, unique=True)
     approval_token3 = Column(Text, unique=True)
     approval_token4 = Column(Text, unique=True)
-    last_renewal_date = Column(DateTime, default=func.now())  # New column for last renewal date
+    last_renewal_date = Column(DateTime, default=func.now())  
+    approver_email1 = Column(String)  
+    approver_email2 = Column(String)  
+    approver_email3 = Column(String)  
+    approver_email4 = Column(String)  
+    disapprover_email1 = Column(String)  
+    disapprover_email2 = Column(String)  
+    disapprover_email3 = Column(String)  
+    disapprover_email4 = Column(String)  
 
 Base.metadata.create_all(bind=engine)
 
@@ -168,8 +180,8 @@ def send_approval_emails(user_email):
     user.approval_token4 = str(uuid.uuid4())
     session.commit()
 
-    stakeholders = ["Shannon.M.Johnston@noaa.gov", "jenny.fox@noaa.gov", "greg.pratt@noaa.gov", user.sponsor]
-    #stakeholders = ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", user.sponsor]
+
+    stakeholders = get_stakeholders(user.sponsor)
     tokens = [user.approval_token1, user.approval_token2, user.approval_token3, user.approval_token4]
 
     for idx, (stakeholder, token) in enumerate(zip(stakeholders, tokens), start=1):
@@ -203,8 +215,7 @@ def send_reminder_emails(user_email):
     if not user or (user.approved1 and user.approved2 and user.approved3 and user.approved4):
         return
 
-    #stakeholders = ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov"]
-    stakeholders = ["Shannon.M.Johnston@noaa.gov", "jenny.fox@noaa.gov", "greg.pratt@noaa.gov","renn.valo@noaa.gov"]
+    stakeholders = get_stakeholders(user.sponsor)
     for idx, stakeholder in enumerate(stakeholders, start=1):
         if not getattr(user, f"approved{idx}"):
             approval_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/{user_email}/{idx}"
@@ -315,6 +326,8 @@ async def approve_user(email: str, approver_id: int, token: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    stakeholders = get_stakeholders(user.sponsor)
+    
     # Check if the user has already been approved by all approvers
     if user.approved1 and user.approved2 and user.approved3 and user.approved4:
         raise HTTPException(status_code=400, detail="User has already been approved by all stakeholders.")
@@ -331,22 +344,26 @@ async def approve_user(email: str, approver_id: int, token: str):
     if approver_id == 1:
         user.approved1 = True
         user.approval_timestamp1 = datetime.utcnow()
+        user.approver_email1 = stakeholders[0]
     elif approver_id == 2:
         user.approved2 = True
         user.approval_timestamp2 = datetime.utcnow()
+        user.approver_email2 = stakeholders[1]
     elif approver_id == 3:
         user.approved3 = True
         user.approval_timestamp3 = datetime.utcnow()
+        user.approver_email3 = stakeholders[2]
     elif approver_id == 4:
         user.approved4 = True
         user.approval_timestamp4 = datetime.utcnow()
+        user.approver_email4 = stakeholders[3]
 
     session.commit()
 
     if user.approved1 and user.approved2 and user.approved3 and user.approved4:
         user.final_approval_timestamp = datetime.utcnow()
         session.commit()
-        send_final_confirmation_email(user.email)
+        send_final_confirmation_email(user.email,user.sponsor)
 
     return {"message": "User approved"}
 
@@ -357,6 +374,8 @@ async def refuse_user(email: str, approver_id: int, token: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    stakeholders = get_stakeholders(user.sponsor)
+
     # Check if the user has already been approved by all approvers
     if user.approved1 and user.approved2 and user.approved3 and user.approved4:
         raise HTTPException(status_code=400, detail="User has already been approved by all stakeholders. Disapproval is not possible from the approvals API.  Please contact open a ticket by emailing help.ssg.gsl@noaa.gov")
@@ -373,15 +392,19 @@ async def refuse_user(email: str, approver_id: int, token: str):
     if approver_id == 1:
         user.disapproved1 = True
         user.approval_timestamp1 = datetime.utcnow()
+        user.disapprover_email1 = stakeholders[0]
     elif approver_id == 2:
         user.disapproved2 = True
         user.approval_timestamp2 = datetime.utcnow()
+        user.disapprover_email2= stakeholders[1]
     elif approver_id == 3:
         user.disapproved3 = True
         user.approval_timestamp3 = datetime.utcnow()
+        user.disapprover_email3 = stakeholders[2]
     elif approver_id == 4:
         user.disapproved4 = True
         user.approval_timestamp3 = datetime.utcnow()
+        user.disapprover_email4 = stakeholders[3]
 
     session.commit()
 
@@ -444,9 +467,8 @@ async def renew_agreement(email: str):
 
     return {"message": "Agreement renewed successfully"}
 
-def send_final_confirmation_email(user_email):
-    #stakeholders = ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov"]
-    stakeholders = ["Shannon.M.Johnston@noaa.gov", "jenny.fox@noaa.gov", "greg.pratt@noaa.gov", "renn.valo@noaa.gov", user.sponsor]
+def send_final_confirmation_email(user_email, sponsor):
+    stakeholders = get_stakeholders(sponsor)
     send_email(user_email, "GitHub Access Granted", "You have been granted an account on GitHub!")
     for stakeholder in stakeholders:
         send_email(stakeholder, "User Approved", f"{user_email} has been granted an account on GitHub.")
