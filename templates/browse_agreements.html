@@ -66,12 +66,12 @@
                     {% if agreement.disapproved3 %}
                         <td>Disapproved by Sponsor 3</td>
                     {% endif %}
-                    <td><button onclick="saveAgreement('{{ agreement.email }}')">Save</button></td>
-                    <button onclick="window.location.href='/githubapprovals/download-agreements/'">Download Spreadsheet</button>
+                    <td><button onclick="saveAgreement('{{ agreement.email }}')">Save</button></td>                    
                 </tr>
             {% endfor %}
         </tbody>
     </table>
+    <button onclick="window.location.href='/githubapprovals/download-agreements/'">Download Spreadsheet</button>
 
     <script>
         async function saveAgreement(email) {
