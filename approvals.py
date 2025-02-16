@@ -70,16 +70,16 @@ class UserAgreement(Base):
     last_name = Column(String, nullable=False)
     esrl_lab = Column(String, nullable=False)
     role = Column(String, nullable=False)
-    sponsor = Column(String, nullable=False)  # GitHub sponsor
     agreed = Column(Boolean, default=False)
-    approved1 = Column(Boolean, default=False)
-    approved2 = Column(Boolean, default=False)
-    approved3 = Column(Boolean, default=False)
-    approved4 = Column(Boolean, default=False)  
-    disapproved1 = Column(Boolean, default=False)
-    disapproved2 = Column(Boolean, default=False)
-    disapproved3 = Column(Boolean, default=False)
-    disapproved4 = Column(Boolean, default=False)
+    sponsor = Column(String, nullable=False)  # GitHub sponsor
+    systemowner = Column(String, nullable=True) #GitHub Federal System Owner 
+    accountadmin = Column(String, nullable=True) #Github Federal Account Administrator
+    isso = Column(String, nullable=True) # GitHub Federal Security Officer
+    sponsorid = Column(String, nullable=True)  # GitHub Federal sponsor
+    dissystemowner = Column(String, nullable=True) #GitHub Federal System Owner
+    disaccountadmin = Column(String, nullable=True) #Github Federal Account Administrator
+    disisso = Column(String, nullable=True) # GitHub Federal Security Officer
+    dissponsor = Column(String, nullable=True)  # GitHub Federal sponsor
     timestamp = Column(DateTime, default=func.now())
     approval_timestamp1 = Column(DateTime)
     approval_timestamp2 = Column(DateTime)
@@ -212,7 +212,7 @@ def send_approval_emails(user_email):
 def send_reminder_emails(user_email):
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == user_email).first()
-    if not user or (user.approved1 and user.approved2 and user.approved3 and user.approved4):
+    if not user or (user.systemowner and user.accountadmin and user.isso and user.sponsorid):
         return
 
     stakeholders = get_stakeholders(user.sponsor)
@@ -329,7 +329,7 @@ async def approve_user(email: str, approver_id: int, token: str):
     stakeholders = get_stakeholders(user.sponsor)
     
     # Check if the user has already been approved by all approvers
-    if user.approved1 and user.approved2 and user.approved3 and user.approved4:
+    if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
         raise HTTPException(status_code=400, detail="User has already been approved by all stakeholders.")
 
     if approver_id == 1 and user.approval_token1 != token:
@@ -342,25 +342,25 @@ async def approve_user(email: str, approver_id: int, token: str):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     if approver_id == 1:
-        user.approved1 = True
+        user.systemowner = stakeholders[0] 
         user.approval_timestamp1 = datetime.utcnow()
         user.approver_email1 = stakeholders[0]
     elif approver_id == 2:
-        user.approved2 = True
+        user.accountadmin = stakeholders[1] 
         user.approval_timestamp2 = datetime.utcnow()
         user.approver_email2 = stakeholders[1]
     elif approver_id == 3:
-        user.approved3 = True
+        user.isso = stakeholders[2] 
         user.approval_timestamp3 = datetime.utcnow()
         user.approver_email3 = stakeholders[2]
     elif approver_id == 4:
-        user.approved4 = True
+        user.sponsorid = stakeholders[3] 
         user.approval_timestamp4 = datetime.utcnow()
         user.approver_email4 = stakeholders[3]
 
     session.commit()
 
-    if user.approved1 and user.approved2 and user.approved3 and user.approved4:
+    if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
         user.final_approval_timestamp = datetime.utcnow()
         session.commit()
         send_final_confirmation_email(user.email,user.sponsor)
@@ -377,7 +377,7 @@ async def refuse_user(email: str, approver_id: int, token: str):
     stakeholders = get_stakeholders(user.sponsor)
 
     # Check if the user has already been approved by all approvers
-    if user.approved1 and user.approved2 and user.approved3 and user.approved4:
+    if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
         raise HTTPException(status_code=400, detail="User has already been approved by all stakeholders. Disapproval is not possible from the approvals API.  Please contact open a ticket by emailing help.ssg.gsl@noaa.gov")
     
     if approver_id == 1 and user.approval_token1 != token:
@@ -390,19 +390,19 @@ async def refuse_user(email: str, approver_id: int, token: str):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     if approver_id == 1:
-        user.disapproved1 = True
+        user.dissystemowner = stakeholders[0] 
         user.approval_timestamp1 = datetime.utcnow()
         user.disapprover_email1 = stakeholders[0]
     elif approver_id == 2:
-        user.disapproved2 = True
+        user.disaccountadmin = stakeholders[1] 
         user.approval_timestamp2 = datetime.utcnow()
         user.disapprover_email2= stakeholders[1]
     elif approver_id == 3:
-        user.disapproved3 = True
+        user.disisso = stakeholders[2] 
         user.approval_timestamp3 = datetime.utcnow()
         user.disapprover_email3 = stakeholders[2]
     elif approver_id == 4:
-        user.disapproved4 = True
+        user.dissponsor = stakeholders[3] 
         user.approval_timestamp3 = datetime.utcnow()
         user.disapprover_email4 = stakeholders[3]
 
@@ -419,40 +419,8 @@ def download_agreements():
 
     # Convert to DataFrame
     df = pd.DataFrame([{
-        'First Name': ag.first_name,
-        'Last Name': ag.last_name,
-        'Email': ag.email,
-        'ESRL Lab': ag.esrl_lab,
-        'Role': ag.role,
-        'Agreed': ag.agreed,
-        'Approved1': ag.approved1,
-        'Approved2': ag.approved2,
-        'Approved3': ag.approved3,
-        'Approved4': ag.approved4,
-        'Disapproved1': ag.disapproved1,
-        'Disapproved2': ag.disapproved2,
-        'Disapproved3': ag.disapproved3,
-        'Disapproved4': ag.disapproved4,
-        'Timestamp': ag.timestamp,
-        'Approval Timestamp1': ag.approval_timestamp1,
-        'Approval Timestamp2': ag.approval_timestamp2,
-        'Approval Timestamp3': ag.approval_timestamp3,
-        'Approval Timestamp4': ag.approval_timestamp4,
-        'Final Approval Timestamp': ag.final_approval_timestamp,
-        'Approval Token1': ag.approval_token1,
-        'Approval Token2': ag.approval_token2,
-        'Approval Token3': ag.approval_token3,
-        'Approval Token4': ag.approval_token4,
-        'last_renewal_date': ag.last_renewal_date,
-        'Approver Email1': ag.approver_email1,
-        'Approver Email2': ag.approver_email2,
-        'Approver Email3': ag.approver_email3,
-        'Approver Email4': ag.approver_email4,
-        'Disapprover Email1': ag.disapprover_email1,
-        'Disapprover Email2': ag.disapprover_email2,
-        'Disapprover Email3': ag.disapprover_email3,
-        'Disapprover Email4': ag.disapprover_email4
-
+        column.name: getattr(ag, column.name)
+        for column in UserAgreement.__table__.columns
     } for ag in agreements])
 
     # Save to CSV
