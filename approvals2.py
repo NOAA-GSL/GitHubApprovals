@@ -118,35 +118,45 @@ def check_for_renewals():
     ).all()
     print(f"Users to renew: {len(users_to_renew)}")
 
+    # Initialize a set to track which users have had their email sent
+    sent_emails = set()
+
     for user in users_to_renew:
         print(f"Checking email for: {user.email}")
-        print(f"Sending email to: {user.email}")
-        print(f"Last renewal date: {user.last_renewal_date}")
 
-        # Generate the renewal link and message
-        renewal_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/renew/{user.email}"
-        message = f"""
-        Dear {user.first_name},
+        if user.email not in sent_emails:
+            print(f"Sending email to: {user.email}")
+            print(f"Last renewal date: {user.last_renewal_date}")
 
-        It has been over a year since your last review of GSL's GitHub Usage Policy Agreement. 
+            # Generate the renewal link and message
+            renewal_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/renew/{user.email}"
+            message = f"""
+            Dear {user.first_name},
 
-            To continue as a GSL team member of GitHub you will need to:
-            Read and understand the roles and responsibilities for being a GSL GitHub team member.  
-            The latest updates to GSL's GitHub Usage Policy can be found here:
-            https://docs.google.com/document/d/1RpJN1kbkheUj5SQCjN4Ta4SWBgrV1uHD/edit
+            It has been over a year since your last review of GSL's GitHub Usage Policy Agreement. 
+
+               To continue as a GSL team member of GitHub you will need to:
+               Read and understand the roles and responsibilities for being a GSL GitHub team member.  
+               The latest updates to GSL's GitHub Usage Policy can be found here:
+               https://docs.google.com/document/d/1RpJN1kbkheUj5SQCjN4Ta4SWBgrV1uHD/edit
            
-        Agree to follow the roles and responsibilities for being a GSL team member by clicking the link below:
-        {renewal_link}
+            Agree to follow the roles and responsibilities for being a GSL team member by clicking the link below:
+            {renewal_link}
 
 
-        Thank you,
-        Your GSL ITS Team
-        """
+            Thank you,
+            Your GSL ITS Team
+            """
             
-        # Send email to the user
-        send_email(user.email, "Agreement Renewal Reminder", message)
-        print(f"Email sent to: {user.email}")
+            # Send email to the user
+            send_email(user.email, "Agreement Renewal Reminder", message)
 
+            # Mark this email as sent by adding the user's email to the set
+            sent_emails.add(user.email)
+            print(f"Email sent to: {user.email}")
+        else:
+            print(f"Email already sent to {user.email}, skipping.")
+    
     session.close()
 
 
@@ -464,6 +474,11 @@ def send_final_confirmation_email(user_email, sponsor):
     for stakeholder in stakeholders:
         send_email(stakeholder, "User Approved", f"{user_email} has been granted an account on GitHub.")
 
+# Call the function immediately
+check_for_renewals() 
+# Schedule the check_for_renewals function to run periodically
+#scheduler.add_job(check_for_renewals, 'interval', minutes=1)  # Check every hour
+#scheduler.add_job(check_for_renewals,'interval',minutes=1,replace_existing=True) # Check every hour
 
-scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every hour
-
+if __name__ == "__main__":
+    uvicorn.run("approvals:app", host="0.0.0.0", port=8000, reload=False)

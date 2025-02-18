@@ -1,16 +1,27 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agreement Form</title>
     <style>
         body {
-            background-image: url('/githubapprovals/images/background.png');
+            background-image: url('/githubapprovals/images/earth.jpg');
             background-size: cover;
             background-repeat: no-repeat;
             background-attachment: fixed;
-            background-position: center 1px;
+            background-position: center;
+            margin: 0;
+            padding: 0;
+            color: rgb(5, 26, 110)
         }
         
+        .logo {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+
         #agreementForm {
             background-color: rgba(255, 255, 255, 0.8);
             padding: 20px;
@@ -59,10 +70,19 @@
             font-size: 64px; 
             font-weight: bold; 
             margin-top: 40px;
+            color: rgb(5, 26, 110); /* Dark blue center */
+            text-shadow: 
+                -1px -1px 0 #fff,  
+                1px -1px 0 #fff,
+                -1px 1px 0 #fff,
+                1px 1px 0 #fff; /* White outline */
         }
     </style>
 </head>
 <body>
+    <div class="logo">
+        <img src="/githubapprovals/images/noaa_logo.png">
+    </div>
     <h1>GSL's GitHub Request Form</h1>
     <form id="agreementForm">
         <input type="email" name="email" placeholder="Email" required>
@@ -89,10 +109,11 @@
 
         <label for="sponsor">Sponsor:</label>
         <select name="sponsor" required>
+            <option value="curtis.alexander@noaa.gov">Curtis Alexander</option>
             <option value="dave.turner@noaa.gov">Dave Turner</option>
             <option value="stephen.weygandt@noaa.gov">Steve Weygandt</option>
             <option value="ligia.bernardet@noaa.gov">Ligia Bernardet</option>
-            <option value="ken.fenton@noaa.gov">Ken Fenton</option>
+            <option value="dan.nietfeld@noaa.gov">Dan Nietfeld</option>
             <option value="zoltan.toth@noaa.gov">Zoltan Toth</option>
             <option value="scott.nahman@noaa.gov">Scott Nahman</option>
             <option value="renn.valo@noaa.gov">Renn Valo test Sponsor</option>

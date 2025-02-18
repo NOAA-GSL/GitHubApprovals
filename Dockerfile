@@ -42,4 +42,6 @@ COPY images /images
 EXPOSE 8000
 
 # Command to run the application
-CMD ["python3", "/approvals.py"]
+#CMD ["python3", "/approvals.py"]
+# Command to run the application
+CMD ["uvicorn", "approvals:app", "--host", "0.0.0.0", "--port", "8000"]
