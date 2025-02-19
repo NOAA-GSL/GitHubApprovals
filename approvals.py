@@ -25,7 +25,8 @@ import time
 
 # Define stakeholders globally  -changing this will change who gets contacted.
 def get_stakeholders(sponsor):
-    return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor]
+    return ["jenny.fox@noaa.gov", "Greg.Pratt@noaa.gov", "Shannon.M.Johnston@noaa.gov", sponsor, "renn.valo@noaa.gov"]
+    # for testing return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
 
 #app = FastAPI()
 app = FastAPI(root_path="https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/")
@@ -130,15 +131,16 @@ def check_for_renewals():
 
         It has been over a year since your last review of GSL's GitHub Usage Policy Agreement. 
 
-            To continue as a GSL team member of GitHub you will need to:
-            Read and understand the roles and responsibilities for being a GSL GitHub team member.  
+            To continue as a GSL GitHub contributor you will need to:
+            Read and understand the roles and responsibilities for being a GSL GitHub {user.role}.  
             The latest updates to GSL's GitHub Usage Policy can be found here:
-            https://docs.google.com/document/d/1RpJN1kbkheUj5SQCjN4Ta4SWBgrV1uHD/edit
+            https://docs.google.com/document/d/1myfENqhtMSvlcrqBAAACSF0rYLPWhXRh/
            
         Agree to follow the roles and responsibilities for being a GSL team member by clicking the link below:
         {renewal_link}
 
-
+        NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
+        
         Thank you,
         Your GSL ITS Team
         """
@@ -216,6 +218,8 @@ def send_approval_emails(user_email):
         {refusal_link}
 
         Thank you for your prompt attention to this matter.
+
+        NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
 
         Best regards,
         Your Approval Team
@@ -458,12 +462,24 @@ async def renew_agreement(email: str):
 
     return {"message": "Agreement renewed successfully"}
 
+@app.delete("/api/agreements/{email}")
+async def delete_agreement(email: str):
+    session = SessionLocal()
+    user_agreement = session.query(UserAgreement).filter(UserAgreement.email == email).first()
+    if not user_agreement:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    session.delete(user_agreement)
+    session.commit()
+    session.close()
+    return {"message": "User agreement deleted successfully"}
+
 def send_final_confirmation_email(user_email, sponsor):
     stakeholders = get_stakeholders(sponsor)
     send_email(user_email, "GitHub Access Granted", "You have been granted an account on GitHub!")
     for stakeholder in stakeholders:
         send_email(stakeholder, "User Approved", f"{user_email} has been granted an account on GitHub.")
 
-
-scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every hour
+check_for_renewals()  # Initial check for renewals on launch of the server
+scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every three days
 
