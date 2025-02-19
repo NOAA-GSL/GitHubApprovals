@@ -18,6 +18,7 @@ The application consists of the following main components:
 - **templates/browse_agreements.html**: HTML template for browsing existing agreements.
 
 ## How It Works
+Users goto https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/ and sign up.  Approvals are automattically sent out to all stakeholders for the approval process.
 
 ### Submitting an Agreement
 
@@ -38,13 +39,17 @@ The application consists of the following main components:
 2. **Approval/Refusal**: Stakeholders can approve or refuse the agreement by clicking the respective links.
 3. **Final Approval**: Once all stakeholders approve, a final confirmation email is sent to the user.
 
+
 ## Implementation
+The current implementation is on our internal Kubernetes network.  You can view the deployment on Rancher for those with access.
 
 ### Database Models
 
-The database model is defined in `approvals.py` using SQLAlchemy:
+The database model is defined in `approvals.py` using SQLAlchemy: and SQLite
 
 ```python
+def get_stakeholders(sponsor): # This is where we set the current stakeholders.  
+    
 class UserAgreement(Base):
     __tablename__ = "user_agreements"
     id = Column(Integer, primary_key=True, index=True)
@@ -68,8 +73,8 @@ class UserAgreement(Base):
     approval_token1 = Column(Text, unique=True)
     approval_token2 = Column(Text, unique=True)
     approval_token3 = Column(Text, unique=True)# GitHubApprovals
+    etc
 ```
-
 ### Endpoints
 
 ```GET /: Renders the agreement form.
@@ -92,7 +97,7 @@ Install Dependencies: Install the required Python packages.
 ### Run the Server: Start the FastAPI server.
 ``` uvicorn approvals:app --host 0.0.0.0 --port 7860```
 NOTE:  Now that the server has been converted you can just start it manually with python3 approvals.py.  This was done to accomidate Docker for the new container.
-### Alternative to running in locally - running in Docker by building the Dockerfile after cloine the Repo
+### Alternative to running in locally - running in Docker by building the Dockerfile after cloning the Repo
 ```docker build -t github-approvals .```
 
 
@@ -106,4 +111,4 @@ to run as a server without a console
 ```http://127.0.0.1:8000/```
 
 Conclusion
-This FastAPI application provides a comprehensive solution for managing user agreements and approvals for GitHub access. It includes form submissions, browsing agreements, and an approval process with email notifications. ```
+This FastAPI application provides a comprehensive solution for managing user agreements and approvals for GitHub access. It includes form submissions, roles, browsing agreements, and an approval process with email notifications. ```
