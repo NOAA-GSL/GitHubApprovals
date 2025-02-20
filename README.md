@@ -44,9 +44,9 @@ Users goto https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/ and sign up.  App
 The current implementation is on our internal Kubernetes network.  You can view the deployment on Rancher for those with access.
 
 ### Sample Deployment Workflow
-1. **Build Container**: Build the container with your GitHub repo and package tag: docker build . -t ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr
-2. **Push Container to GitHub**: Push the new tagged container to your repo: docker push ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr:latest
-3. **Redeploy Container in Kubernetes**: This last step is handles via CLI or Rancher depending on preferences and current setup of your Kubernetes network at GSL.
+1. **Build Container**: Build the container with your GitHub repo and package tag: ```docker build . -t ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr```
+2. **Push Container to GitHub**: Push the new tagged container to your repo: ```docker push ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr:latest```
+3. **Redeploy Container in Kubernetes**: This last step is handled via CLI or Rancher depending on preferences and current setup of your Kubernetes network at GSL.
 
 ### Database Models
 
