@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Form, HTTPException, Request, BackgroundTasks
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, BackgroundTasks, status
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, func, Text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -30,6 +31,7 @@ def get_stakeholders(sponsor):
 
 #app = FastAPI()
 app = FastAPI(root_path="https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/")
+security = HTTPBasic() #adding security to endpoints that need it.
 
 # List of allowed origins (single domain)
 origins = [
@@ -463,7 +465,9 @@ async def renew_agreement(email: str):
     return {"message": "Agreement renewed successfully"}
 
 @app.delete("/api/agreements/{email}")
-async def delete_agreement(email: str):
+async def delete_agreement(email: str, credentials: HTTPBasicCredentials = Depends(security)):
+    authenticate_user(credentials)
+    
     session = SessionLocal()
     user_agreement = session.query(UserAgreement).filter(UserAgreement.email == email).first()
     if not user_agreement:
@@ -473,6 +477,16 @@ async def delete_agreement(email: str):
     session.commit()
     session.close()
     return {"message": "User agreement deleted successfully"}
+
+def authenticate_user(credentials: HTTPBasicCredentials):
+    correct_username = os.getenv("EMAIL_ADDRESS")
+    correct_password = os.getenv("EMAIL_PASSWORD")
+    if not (credentials.username == correct_username and credentials.password == correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )    
 
 def send_final_confirmation_email(user_email, sponsor):
     stakeholders = get_stakeholders(sponsor)
