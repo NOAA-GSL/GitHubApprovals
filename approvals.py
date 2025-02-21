@@ -27,7 +27,7 @@ import time
 # Define stakeholders globally  -changing this will change who gets contacted.
 def get_stakeholders(sponsor):
     return ["jenny.fox@noaa.gov", "Greg.Pratt@noaa.gov", "Shannon.M.Johnston@noaa.gov", sponsor, "renn.valo@noaa.gov"]
-    # for testing return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
+    #return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
 
 #app = FastAPI()
 app = FastAPI(root_path="https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/")
@@ -131,6 +131,8 @@ def check_for_renewals():
         message = f"""
         Dear {user.first_name},
 
+        NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
+
         It has been over a year since your last review of GSL's GitHub Usage Policy Agreement. 
 
             To continue as a GSL GitHub contributor you will need to:
@@ -202,7 +204,15 @@ def send_approval_emails(user_email):
 
     stakeholders = get_stakeholders(user.sponsor)
     tokens = [user.approval_token1, user.approval_token2, user.approval_token3, user.approval_token4]
+    
+    # Extract first and last name from sponsor email
+    sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
 
+    # Get the number of active licenses from the database
+    rowsindatabase = session.query(UserAgreement).count()
+    available_licenses = 106 - rowsindatabase 
+
+    
     for idx, (stakeholder, token) in enumerate(zip(stakeholders, tokens), start=1):
         approval_link = f'"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/approve_user/{user_email}/{idx}?token={token}"'
         refusal_link = f'"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/refuse_user/{user_email}/{idx}?token={token}"'
@@ -210,9 +220,13 @@ def send_approval_emails(user_email):
         message = f"""
         Dear GitHub Stakeholder,
 
-        A new user agreement from {user_email} requires your attention.
+        NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
 
-        Please review the request and take the appropriate action:
+        {sponsor_name} has sponsored {user_email} to join GSL's GitHub.
+
+        We currently have {rowsindatabase} active licenses with {available_licenses} licenses available for new members.
+
+        Do you approve or refuse {user_email} request to join GSL's GitHub?:
         - Approve: 
         {approval_link}
 
@@ -494,6 +508,6 @@ def send_final_confirmation_email(user_email, sponsor):
     for stakeholder in stakeholders:
         send_email(stakeholder, "User Approved", f"{user_email} has been granted an account on GitHub.")
 
-check_for_renewals()  # Initial check for renewals on launch of the server
+#check_for_renewals()  # Initial check for renewals on launch of the server
 scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every three days
 
