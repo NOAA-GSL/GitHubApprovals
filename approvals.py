@@ -1,3 +1,8 @@
+"""Aprovals API for GitHub access at NOAA GSL
+author: Renn Valo
+date: 03/1/2025
+Version: 1.8
+"""
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, BackgroundTasks, status
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
@@ -201,22 +206,56 @@ def send_approval_emails(user_email):
     user.approval_token4 = str(uuid.uuid4())
     session.commit()
 
+    # Extract first and last name from sponsor email
+    sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
+
+    # Send approval email to the sponsor first
+    approval_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/approve_user/{user_email}/1?token={user.approval_token1}"
+    refusal_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/refuse_user/{user_email}/1?token={user.approval_token1}"
+    message = f"""
+    Dear {sponsor_name},
+
+    NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
+
+    You have sponsored {user_email} to join GSL's GitHub.
+    
+    Do you approve or refuse {user_email}'s request to join GSL's GitHub?:
+    - Approve: 
+    {approval_link}
+
+    - Refuse: 
+    {refusal_link}
+
+    Thank you for your prompt attention to this matter.
+
+    NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
+
+    Best regards,
+    Your Approval Team
+    """
+    send_email(user.sponsor, "User Agreement Approval Needed", message)
+
+def send_stakeholder_approval_emails(user_email):
+    session = SessionLocal()
+    user = session.query(UserAgreement).filter(UserAgreement.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
     stakeholders = get_stakeholders(user.sponsor)
-    tokens = [user.approval_token1, user.approval_token2, user.approval_token3, user.approval_token4]
-    
+    tokens = [user.approval_token2, user.approval_token3, user.approval_token4]
+
     # Extract first and last name from sponsor email
     sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
 
     # Get the number of active licenses from the database
     rowsindatabase = session.query(UserAgreement).count()
-    available_licenses = 106 - rowsindatabase 
+    available_licenses = 106 - rowsindatabase
 
-    
-    for idx, (stakeholder, token) in enumerate(zip(stakeholders, tokens), start=1):
-        approval_link = f'"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/approve_user/{user_email}/{idx}?token={token}"'
-        refusal_link = f'"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/refuse_user/{user_email}/{idx}?token={token}"'
-        #message = f"New user agreement from {user_email}. Click to approve: {approval_link} or refuse: {refusal_link}"
+    for idx, (stakeholder, token) in enumerate(zip(stakeholders[1:], tokens), start=2):
+        approval_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/approve_user/{user_email}/{idx}?token={token}"
+        refusal_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/refuse_user/{user_email}/{idx}?token={token}"
+
         message = f"""
         Dear GitHub Stakeholder,
 
@@ -226,7 +265,7 @@ def send_approval_emails(user_email):
 
         We currently have {rowsindatabase} active licenses with {available_licenses} licenses available for new members.
 
-        Do you approve or refuse {user_email} request to join GSL's GitHub?:
+        Do you approve or refuse {user_email}'s request to join GSL's GitHub?:
         - Approve: 
         {approval_link}
 
@@ -377,30 +416,33 @@ async def approve_user(email: str, approver_id: int, token: str):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     if approver_id == 1:
-        user.systemowner = stakeholders[0] 
-        user.approval_timestamp1 = datetime.utcnow()
-        user.approver_email1 = stakeholders[0]
-    elif approver_id == 2:
-        user.accountadmin = stakeholders[1] 
-        user.approval_timestamp2 = datetime.utcnow()
-        user.approver_email2 = stakeholders[1]
-    elif approver_id == 3:
-        user.isso = stakeholders[2] 
-        user.approval_timestamp3 = datetime.utcnow()
-        user.approver_email3 = stakeholders[2]
-    elif approver_id == 4:
         user.sponsorid = stakeholders[3] 
+        user.approval_timestamp1 = datetime.utcnow()
+        user.approver_email1 = stakeholders[3]
+        session.commit()
+        # Send approval emails to other stakeholders after sponsor approves
+        send_stakeholder_approval_emails(email)
+    elif approver_id == 2:
+        user.systemowner = stakeholders[0] 
+        user.approval_timestamp2 = datetime.utcnow()
+        user.approver_email2 = stakeholders[0]
+    elif approver_id == 3:
+        user.accountadmin = stakeholders[1] 
+        user.approval_timestamp3 = datetime.utcnow()
+        user.approver_email3 = stakeholders[1]
+    elif approver_id == 4:
+        user.isso = stakeholders[2] 
         user.approval_timestamp4 = datetime.utcnow()
-        user.approver_email4 = stakeholders[3]
+        user.approver_email4 = stakeholders[2]
 
     session.commit()
 
     if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
         user.final_approval_timestamp = datetime.utcnow()
         session.commit()
-        send_final_confirmation_email(user.email,user.sponsor)
+        send_final_confirmation_email(user.email, user.sponsor)
 
-    return {"message": "User approved"}
+    return {"message": "Your approval has been received and the request will now continue through the approval process. Once the candidate is either approved or denied, you'll receive an update via email with access status confirmation."}
 
 @app.get("/refuse_user/{email}/{approver_id}")
 async def refuse_user(email: str, approver_id: int, token: str):

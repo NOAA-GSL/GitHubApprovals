@@ -28,6 +28,8 @@ RUN pip3 install fastapi==0.88.0 \
 
 # Copy the approvals.py file into the root directory of the container
 COPY approvals.py /approvals.py
+#NOTE: flipping this copy you can test a green or blue version of the code
+#COPY blue_version.py /approvals.py
 
 # Create the necessary directories
 RUN mkdir -p /data /templates /images
@@ -45,3 +47,5 @@ EXPOSE 8000
 #CMD ["python3", "/approvals.py"]
 # Command to run the application
 CMD ["uvicorn", "approvals:app", "--host", "0.0.0.0", "--port", "8000"]
+#CMD ["uvicorn", "sponsor_first_test:app", "--host",  "0.0.0.0", "--port", "8000" ]
+
