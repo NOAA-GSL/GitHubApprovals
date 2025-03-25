@@ -39,6 +39,10 @@ Users goto https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/ and sign up.  App
 2. **Approval/Refusal**: Stakeholders can approve or refuse the agreement by clicking the respective links.
 3. **Final Approval**: Once all stakeholders approve, a final confirmation email is sent to the user.
 
+### Removing an existing user
+1. on a linux terminal that is behind the NOAA firewall or VPN 
+``` curl -u "first.last@noaa.gov:YOURPASSWORD" -X DELETE "https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/api/agreements/first.laste@noaa.gov" ```
+
 
 ### Implementation
 The current implementation is on our internal Kubernetes network.  You can view the deployment on Rancher for those with access.
