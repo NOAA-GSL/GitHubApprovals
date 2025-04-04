@@ -51,6 +51,7 @@ The current implementation is on our internal Kubernetes network.  You can view 
 1. **Build Container**: Build the container with your GitHub repo and package tag: ```docker build . -t ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr```
 2. **Push Container to GitHub**: Push the new tagged container to your repo: ```docker push ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr:latest```
 3. **Redeploy Container in Kubernetes**: This last step is handled via CLI or Rancher depending on preferences and current setup of your Kubernetes network at GSL.
+4. **Don't forget to push your updated code to the GitHub GSL repo if you've made changes to the container ```git push https://github.com/NOAA-GSL/GitHubApprovals.git```
 
 ### Database Models
 
