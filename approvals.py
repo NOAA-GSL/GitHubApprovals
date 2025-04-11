@@ -32,7 +32,8 @@ import time
 # Define stakeholders globally  -changing this will change who gets contacted.
 def get_stakeholders(sponsor):
     return ["jenny.fox@noaa.gov", "Greg.Pratt@noaa.gov", "Shannon.M.Johnston@noaa.gov", sponsor, "renn.valo@noaa.gov"]
-    #return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
+    # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
+    # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
 
 #app = FastAPI()
 app = FastAPI(root_path="https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/")
@@ -427,13 +428,13 @@ async def approve_user(email: str, approver_id: int, token: str):
         user.approval_timestamp2 = datetime.utcnow()
         user.approver_email2 = stakeholders[0]
     elif approver_id == 3:
-        user.accountadmin = stakeholders[1] 
+        user.accountadmin = stakeholders[2] 
         user.approval_timestamp3 = datetime.utcnow()
-        user.approver_email3 = stakeholders[1]
+        user.approver_email3 = stakeholders[2]
     elif approver_id == 4:
-        user.isso = stakeholders[2] 
+        user.isso = stakeholders[1] 
         user.approval_timestamp4 = datetime.utcnow()
-        user.approver_email4 = stakeholders[2]
+        user.approver_email4 = stakeholders[1]
 
     session.commit()
 
