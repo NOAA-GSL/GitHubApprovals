@@ -31,8 +31,7 @@ import time
 
 # Define stakeholders globally  -changing this will change who gets contacted.
 def get_stakeholders(sponsor):
-    #return ["jenny.fox@noaa.gov", "Greg.Pratt@noaa.gov", "Shannon.M.Johnston@noaa.gov", sponsor, "renn.valo@noaa.gov"]
-    return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
+    return ["jenny.fox@noaa.gov", "Greg.Pratt@noaa.gov", "Shannon.M.Johnston@noaa.gov", sponsor, "renn.valo@noaa.gov"]
     # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
     # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
 
@@ -77,60 +76,6 @@ ORG_NAME = "NOAA-GSL"  # Replace with your organization name
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # get token so you can use API
 HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
 TOTAL_LICENSES = 97  # Replace with your organization's total  -static value for now
-
-# This is the number of licenses you have purchased from GitHub.  This is a static value for now.
-def get_active_members_count(org_name):
-    GSLgithuburl = f"https://api.github.com/orgs/{org_name}/members"
-    params = {"per_page": 100}
-    active_members = 0
-
-    while GSLgithuburl:
-        response = requests.get(GSLgithuburl, headers=HEADERS, params=params)
-        if response.status_code != 200:
-            print(f"Error: {response.status_code}, {response.json()}")
-            return 0
-        
-        data = response.json()
-        active_members += len(data)
-        # Pagination support
-        GSLgithuburl = response.links.get('next', {}).get('GSLgithuburl')  # Get 'next' page if available
-
-    return active_members
-
-def get_admin_users(org_name):
-    GSLgithuburl = f"https://api.github.com/orgs/{org_name}/members"
-    #params = {"role": "admin", "per_page": 100} #use this filter for only admin users
-    params = {"per_page": 100}
-    admins = []
-    
-    while GSLgithuburl:
-        response = requests.get(GSLgithuburl, headers=HEADERS, params=params)
-        if response.status_code != 200:
-            print(f"Error: {response.status_code}, {response.json()}")
-            return []
-        
-        data = response.json()
-        admins.extend(data)
-        # Pagination support
-        GSLgithuburl = response.links.get('next', {}).get('GSLgithuburl')  # Get 'next' page if available
-
-    return admins
-
-def get_user_details(username):
-    GSLgithuburl = f"https://api.github.com/users/{username}"
-    response = requests.get(GSLgithuburl, headers=HEADERS)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Error fetching user details for {username}: {response.status_code}")
-        return {}
-
-def get_license_status():
-    active_members = get_active_members_count(ORG_NAME)
-    remaining_licenses = TOTAL_LICENSES - active_members
-    print(f"Active Members: {active_members}")
-    print(f"Remaining Licenses: {remaining_licenses}")
-    return remaining_licenses
 
 # Database models
 class UserAgreement(Base):
@@ -309,13 +254,9 @@ def send_stakeholder_approval_emails(user_email):
     # Extract first and last name from sponsor email
     sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
 
-    # Get the number of active licenses from the gitHub API
-    # Call the get_license_status function and store the result
-    remaining_licenses = get_license_status()    
-    # Print the returned value
-    print(f"Number of remaining licenses: {remaining_licenses}")
-
-    available_licenses = remaining_licenses
+    # Get the number of active licenses from the database
+    rowsindatabase = session.query(UserAgreement).count()
+    available_licenses = 106 - rowsindatabase
 
     for idx, (stakeholder, token) in enumerate(zip(stakeholders[1:], tokens), start=2):
         approval_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/approve_user/{user_email}/{idx}?token={token}"
