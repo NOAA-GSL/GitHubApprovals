@@ -71,6 +71,11 @@ logging.basicConfig(level=logging.INFO)
 # Load environment variables
 #load_dotenv()
 load_dotenv('/data/.env')
+# Constants
+ORG_NAME = "NOAA-GSL"  # Replace with your organization name
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # get token so you can use API
+HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
+TOTAL_LICENSES = 97  # Replace with your organization's total  -static value for now
 
 # Database models
 class UserAgreement(Base):
