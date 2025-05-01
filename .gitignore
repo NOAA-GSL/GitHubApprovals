@@ -1,5 +1,12 @@
 /data
+notification/
 __pycache__/
 .env
 /ApprovalProjectEnv
 sponsor_first_test.py
+zarr.py
+backup.csv
+dependabotalerts9.py
+/notifications/informationowners.csv
+
+
