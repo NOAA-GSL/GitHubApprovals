@@ -32,7 +32,7 @@ import time
 # Define stakeholders globally  -changing this will change who gets contacted.
 def get_stakeholders(sponsor):
     #return ["jenny.fox@noaa.gov", "Greg.Pratt@noaa.gov", "Shannon.M.Johnston@noaa.gov", sponsor, "renn.valo@noaa.gov"]
-    return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov"], "renn.valo@noaa.gov"]
+    return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
     # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
     # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
 
