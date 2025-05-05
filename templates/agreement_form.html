@@ -83,7 +83,7 @@
     <div class="logo">
         <img src="/githubapprovals/images/noaa_logo.png">
     </div>
-    <h1>GSL's GitHub Request Form</h1>
+    <h1>GitHub Request Form</h1>
     <form id="agreementForm">
         <input type="email" name="email" placeholder="Email" required>
         <input type="text" name="first_name" placeholder="First Name" required>
@@ -93,26 +93,24 @@
         <select name="esrl_lab" id="esrl_lab" required>            
             <option value="csl">CSL</option>
             <option value="gml">GML</option>
-            <option value="gsl">GSL</option>
+            <option value="gsl" selected>GSL</option>
             <option value="psl">PSL</option>
         </select>
         
         <label for="role">Anticipated Role:</label>
         <select name="role" required>
-            <option value="General User">General User</option>
             <option value="Team Member">Team Member</option>
             <option value="Information Owner">Information Owner</option>
             <option value="Sponsor">Sponsor</option>
             <option value="GSL GitHub Account Administrator">Administrator</option>
-            <option value="System Owner (SO)">System Owner</option>
-            <option value="Information System Security Officer (ISSO)">Information System Security Officer</option>
+            <option value="System Owner (SO)">System Owner - Doug Ohlhorst</option>
+            <option value="Information System Security Officer (ISSO)">ISSO - Shannon M Johnston</option>
         </select>
 
         <label for="sponsor">Sponsor:</label>
         <select name="sponsor" id="sponsor" required>
             <option value="curtis.alexander@noaa.gov">Curtis Alexander</option>
             <option value="dave.turner@noaa.gov">Dave Turner</option>
-            <option value="stephen.weygandt@noaa.gov">Steve Weygandt</option>
             <option value="ligia.bernardet@noaa.gov">Ligia Bernardet</option>
             <option value="ken.fenton@noaa.gov">Ken Fenton</option>
             <option value="jenny.fox@noaa.gov">Jenny Fox</option>
@@ -146,46 +144,40 @@
         </div>
         
         <button type="submit">Submit</button>
+        <div id="message"></div>
     </form>
     
-    <div id="message"></div>
+
 
     <script>
         const sponsorsByLab = {
             gsl: [
                 { value: "curtis.alexander@noaa.gov", text: "Curtis Alexander" },
                 { value: "dave.turner@noaa.gov", text: "Dave Turner" },
-                { value: "stephen.weygandt@noaa.gov", text: "Steve Weygandt" },
                 { value: "ligia.bernardet@noaa.gov", text: "Ligia Bernardet" },
                 { value: "ken.fenton@noaa.gov", text: "Ken Fenton" },
                 { value: "jenny.fox@noaa.gov", text: "Jenny Fox" }
             ],
             psl: [
-                { value: "curtis.alexander@noaa.gov", text: "Curtis Alexander" },
-                { value: "greg.turner@noaa.gov", text: "Greg Pratt" },
-                { value: "renn.weygandt@noaa.gov", text: "Renn Valo" },
-                { value: "ligia.bernardet@noaa.gov", text: "Ligia Bernardet" },
-                { value: "ken.fenton@noaa.gov", text: "Ken Fenton" },
-                { value: "shannon.fox@noaa.gov", text: "Shannon Fox" }
+                { value: "john.doe@noaa.gov", text: "John Doe" },
+                { value: "jane.smith@noaa.gov", text: "Jane Smith" }
             ],
             csl: [
                 { value: "john.doe@noaa.gov", text: "John Doe" },
                 { value: "jane.smith@noaa.gov", text: "Jane Smith" }
             ],
             gml: [
-                { value: "alice.brown@noaa.gov", text: "Alice Brown" },
-                { value: "bob.jones@noaa.gov", text: "Bob Jones" }
+                { value: "john.doe@noaa.gov", text: "John Doe" },
+                { value: "jane.smith@noaa.gov", text: "Jane Smith" }    
             ]
         };
 
-        document.getElementById('esrl_lab').addEventListener('change', function() {
-            const selectedLab = this.value;
-            const sponsorSelect = document.getElementById('sponsor');
-            
-            // Clear existing options
-            sponsorSelect.innerHTML = '';
+        const esrlLabSelect = document.getElementById('esrl_lab');
+        const sponsorSelect = document.getElementById('sponsor');
 
-            // Populate new options based on the selected lab
+        // Function to populate sponsors based on the selected lab
+        function populateSponsors(selectedLab) {
+            sponsorSelect.innerHTML = '';
             if (sponsorsByLab[selectedLab]) {
                 sponsorsByLab[selectedLab].forEach(sponsor => {
                     const option = document.createElement('option');
@@ -194,6 +186,16 @@
                     sponsorSelect.appendChild(option);
                 });
             }
+        }
+
+        // Populate sponsors on lab change
+        esrlLabSelect.addEventListener('change', function() {
+            populateSponsors(this.value);
+        });
+
+        // Populate sponsors on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            populateSponsors(esrlLabSelect.value);
         });
 
         document.getElementById('agreementForm').addEventListener('submit', async function(event) {
