@@ -90,12 +90,11 @@
         <input type="text" name="last_name" placeholder="Last Name" required>
         
         <label for="esrl_lab">ESRL Laboratory:</label>
-        <select name="esrl_lab" required>            
+        <select name="esrl_lab" id="esrl_lab" required>            
             <option value="csl">CSL</option>
             <option value="gml">GML</option>
             <option value="gsl">GSL</option>
             <option value="psl">PSL</option>
-            <!-- Add other labs as needed -->
         </select>
         
         <label for="role">Anticipated Role:</label>
@@ -110,7 +109,7 @@
         </select>
 
         <label for="sponsor">Sponsor:</label>
-        <select name="sponsor" required>
+        <select name="sponsor" id="sponsor" required>
             <option value="curtis.alexander@noaa.gov">Curtis Alexander</option>
             <option value="dave.turner@noaa.gov">Dave Turner</option>
             <option value="stephen.weygandt@noaa.gov">Steve Weygandt</option>
@@ -126,26 +125,25 @@
                     <a href="https://docs.google.com/document/d/1myfENqhtMSvlcrqBAAACSF0rYLPWhXRh/" target="_blank">
                         Read and understand GSL's GitHub Usage Policy
                     </a>
-                    <p></p>
                 </label>
             </div>
             <div>
                 <input type="checkbox" name="requirement2" id="requirement2" required>
                 <label for="requirement2"> Create a GitHub account using your NOAA email address</label>
-                <p></p>
             </div>
             <div>
                 <input type="checkbox" name="requirement3" id="requirement3" required>
-                <label for="requirement1">
+                <label for="requirement3">
                     <a href="https://sites.google.com/noaa.gov/gsl-staff-resources/its/yubikey-guidance" target="_blank">
                         Use two factor authentication with your GSL accounts
                     </a>
-                    <p></p>
+                    <br>
                     <a href="https://docs.github.com/en/authentication/securing-your-account-with-two-factor-authentication-2fa" target="_blank">
                         Enable two factor authentication on your GitHub account
                     </a>
                 </label>
             </div>
+        </div>
         
         <button type="submit">Submit</button>
     </form>
@@ -153,6 +151,51 @@
     <div id="message"></div>
 
     <script>
+        const sponsorsByLab = {
+            gsl: [
+                { value: "curtis.alexander@noaa.gov", text: "Curtis Alexander" },
+                { value: "dave.turner@noaa.gov", text: "Dave Turner" },
+                { value: "stephen.weygandt@noaa.gov", text: "Steve Weygandt" },
+                { value: "ligia.bernardet@noaa.gov", text: "Ligia Bernardet" },
+                { value: "ken.fenton@noaa.gov", text: "Ken Fenton" },
+                { value: "jenny.fox@noaa.gov", text: "Jenny Fox" }
+            ],
+            psl: [
+                { value: "curtis.alexander@noaa.gov", text: "Curtis Alexander" },
+                { value: "greg.turner@noaa.gov", text: "Greg Pratt" },
+                { value: "renn.weygandt@noaa.gov", text: "Renn Valo" },
+                { value: "ligia.bernardet@noaa.gov", text: "Ligia Bernardet" },
+                { value: "ken.fenton@noaa.gov", text: "Ken Fenton" },
+                { value: "shannon.fox@noaa.gov", text: "Shannon Fox" }
+            ],
+            csl: [
+                { value: "john.doe@noaa.gov", text: "John Doe" },
+                { value: "jane.smith@noaa.gov", text: "Jane Smith" }
+            ],
+            gml: [
+                { value: "alice.brown@noaa.gov", text: "Alice Brown" },
+                { value: "bob.jones@noaa.gov", text: "Bob Jones" }
+            ]
+        };
+
+        document.getElementById('esrl_lab').addEventListener('change', function() {
+            const selectedLab = this.value;
+            const sponsorSelect = document.getElementById('sponsor');
+            
+            // Clear existing options
+            sponsorSelect.innerHTML = '';
+
+            // Populate new options based on the selected lab
+            if (sponsorsByLab[selectedLab]) {
+                sponsorsByLab[selectedLab].forEach(sponsor => {
+                    const option = document.createElement('option');
+                    option.value = sponsor.value;
+                    option.textContent = sponsor.text;
+                    sponsorSelect.appendChild(option);
+                });
+            }
+        });
+
         document.getElementById('agreementForm').addEventListener('submit', async function(event) {
             event.preventDefault();
             const formData = new FormData(event.target);
