@@ -25,7 +25,9 @@ RUN pip3 install fastapi==0.88.0 \
                  numpy==1.22 \
                  pandas==1.3.5 \
                  pydantic>=1.10.13 \
-                 python-multipart==0.0.5
+                 python-multipart==0.0.5 \
+                 requests \
+                 schedule
 
 # Copy the approvals.py file into the root directory of the container
 COPY approvals.py /approvals.py

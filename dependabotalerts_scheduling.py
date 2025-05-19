@@ -9,7 +9,7 @@ import csv  # Import CSV module
 from dotenv import load_dotenv
 import schedule  # Import the schedule library
 
-load_dotenv()
+load_dotenv(dotenv_path="data/.env")
 
 # GitHub API token with necessary permissions
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # get token so you can use API
