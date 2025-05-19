@@ -12,6 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y python3 python3-pip build-essential libssl-dev libffi-dev python3-dev tzdata && \
     apt-get install -y libatlas-base-dev && \
+    apt-get install -y supervisor && \
     apt-get clean
 
 # Install the Python dependencies directly
@@ -31,6 +32,14 @@ COPY approvals.py /approvals.py
 #NOTE: flipping this copy you can test a green or blue version of the code
 #COPY blue_version.py /approvals.py
 
+# Copy supervisor config
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+#Copy the notifications files into the root directory of the container
+COPY dependabotalerts_scheduling.py /ddependabotalerts_scheduling.py
+COPY informationowners.csv /informationowners.csv
+
+
 # Create the necessary directories
 RUN mkdir -p /data /templates /images
 
@@ -46,6 +55,6 @@ EXPOSE 8000
 # Command to run the application
 #CMD ["python3", "/approvals.py"]
 # Command to run the application
-CMD ["uvicorn", "approvals:app", "--host", "0.0.0.0", "--port", "8000"]
+#CMD ["uvicorn", "approvals:app", "--host", "0.0.0.0", "--port", "8000"]
 #CMD ["uvicorn", "sponsor_first_test:app", "--host",  "0.0.0.0", "--port", "8000" ]
-
+CMD ["/usr/bin/supervisord"]
