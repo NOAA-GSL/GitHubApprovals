@@ -36,7 +36,7 @@ COPY approvals.py /approvals.py
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 #Copy the notifications files into the root directory of the container
-COPY dependabotalerts_scheduling.py /ddependabotalerts_scheduling.py
+COPY dependabotalerts_scheduling.py /dependabotalerts_scheduling.py
 COPY informationowners.csv /informationowners.csv
 
 
