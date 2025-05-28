@@ -526,8 +526,18 @@ async def renew_agreement(email: str):
 
     return {"message": "Agreement renewed successfully"}
 
+from dotenv import dotenv_values
+
 @app.delete("/api/agreements/{email}")
 async def delete_agreement(email: str, credentials: HTTPBasicCredentials = Depends(security)):
+    # Check for local .env with GITHUB_TOKEN before allowing delete
+    local_env_path = r"C:\Users\renn.valo\Documents\SourceCode\PythonProjects\GitHubApprovals\.env"
+    if not os.path.exists(local_env_path):
+        raise HTTPException(status_code=403, detail="Local .env file with GITHUB_TOKEN is required to delete users.")
+    env_vars = dotenv_values(local_env_path)
+    if not env_vars.get("GITHUB_TOKEN"):
+        raise HTTPException(status_code=403, detail="GITHUB_TOKEN missing in local .env file.")
+
     authenticate_user(credentials)
     
     session = SessionLocal()

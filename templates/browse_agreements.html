@@ -47,7 +47,35 @@
                     <td><input type="text" class="edit-field" id="esrl_lab_{{ agreement.email }}" value="{{ agreement.esrl_lab }}"></td>
                     <td><input type="text" class="edit-field" id="role_{{ agreement.email }}" value="{{ agreement.role }}"></td>
                     <td><input type="checkbox" class="edit-field" id="agreed_{{ agreement.email }}" {% if agreement.agreed %}checked{% endif %}></td>
-                    <td><input type="text" class="edit-field" id="last_renewal_date_{{ agreement.email }}" value="{{ agreement.last_renewal_date }}"></td> <!-- New input field -->
+                    <td><input type="text" class="edit-field" id="last_renewal_date_{{ agreement.email }}" value="{{ agreement.last_renewal_date }}"></td>
+                    <td>
+                        <form method="post" action="/delete_agreement/{{ agreement.email }}" style="display:inline;">
+                            <button type="submit" onclick="return confirm('Are you sure you want to delete this agreement?');">Delete</button>
+                        </form>
+                    </td>
+                    {% if agreement.approved1 or agreement.disapproved1 or agreement.approved2 or agreement.disapproved2 or agreement.approved3 or agreement.disapproved3 %}
+                        <td>Approval Status</td>
+                    {% else %}
+                        <td>No Approvals Yet</td>
+                    {% endif %}
+                    {% if agreement.approved1 %}
+                        <td>Approved by Sponsor 1</td>
+                    {% endif %}
+                    {% if agreement.disapproved1 %}
+                        <td>Disapproved by Sponsor 1</td>
+                    {% endif %}
+                    {% if agreement.approved2 %}
+                        <td>Approved by Sponsor 2</td>
+                    {% endif %}
+                    {% if agreement.disapproved2 %}
+                        <td>Disapproved by Sponsor 2</td>
+                    {% endif %}
+                    {% if agreement.approved3 %}
+                        <td>Approved by Sponsor 3</td>
+                    {% endif %}
+                    {% if agreement.disapproved3 %}
+                        <td>Disapproved by Sponsor 3</td>
+                    {% endif %}
                     {% if agreement.approved1 %}
                         <td>Approved by Sponsor 1</td>
                     {% endif %}
