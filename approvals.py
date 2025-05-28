@@ -522,6 +522,17 @@ def download_agreements():
 
     return FileResponse(file_path, media_type='text/csv', filename="agreements.csv")
 
+# new endpoint to get the list of labs and their sponsors
+@app.get("/api/lab_sponsors")
+async def get_lab_sponsors():
+    df = pd.read_csv("/lab_sponsors.csv")
+    sponsors_by_lab = {}
+    for _, row in df.iterrows():
+        lab = row['lab']
+        sponsor = {"value": row['email'], "text": row['name']}
+        sponsors_by_lab.setdefault(lab, []).append(sponsor)
+    return sponsors_by_lab
+
 # Add a new endpoint for users to renew their agreement
 @app.get("/renew/{email}")
 async def renew_agreement(email: str):

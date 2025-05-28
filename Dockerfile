@@ -40,6 +40,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 #Copy the notifications files into the root directory of the container
 COPY dependabotalerts_scheduling.py /dependabotalerts_scheduling.py
 COPY informationowners.csv /informationowners.csv
+COPY lab_sponsors.csv /lab_sponsors.csv
 
 
 # Create the necessary directories

@@ -109,11 +109,7 @@
 
         <label for="sponsor">Sponsor:</label>
         <select name="sponsor" id="sponsor" required>
-            <option value="curtis.alexander@noaa.gov">Curtis Alexander</option>
-            <option value="dave.turner@noaa.gov">Dave Turner</option>
-            <option value="ligia.bernardet@noaa.gov">Ligia Bernardet</option>
-            <option value="ken.fenton@noaa.gov">Ken Fenton</option>
-            <option value="jenny.fox@noaa.gov">Jenny Fox</option>
+            <!-- Options will be populated by JavaScript -->
         </select>
 
         <div class="checkbox-container">
@@ -148,32 +144,19 @@
     </form>
     
 
-
     <script>
-        const sponsorsByLab = {
-            gsl: [
-                { value: "curtis.alexander@noaa.gov", text: "Curtis Alexander" },
-                { value: "dave.turner@noaa.gov", text: "Dave Turner" },
-                { value: "ligia.bernardet@noaa.gov", text: "Ligia Bernardet" },
-                { value: "ken.fenton@noaa.gov", text: "Ken Fenton" },
-                { value: "jenny.fox@noaa.gov", text: "Jenny Fox" }
-            ],
-            psl: [
-                { value: "john.doe@noaa.gov", text: "John Doe" },
-                { value: "jane.smith@noaa.gov", text: "Jane Smith" }
-            ],
-            csl: [
-                { value: "john.doe@noaa.gov", text: "John Doe" },
-                { value: "jane.smith@noaa.gov", text: "Jane Smith" }
-            ],
-            gml: [
-                { value: "john.doe@noaa.gov", text: "John Doe" },
-                { value: "jane.smith@noaa.gov", text: "Jane Smith" }    
-            ]
-        };
+        let sponsorsByLab = {};
 
         const esrlLabSelect = document.getElementById('esrl_lab');
         const sponsorSelect = document.getElementById('sponsor');
+
+        // Fetch the sponsors mapping from the backend
+        fetch('/githubapprovals/api/lab_sponsors')
+            .then(response => response.json())
+            .then(data => {
+                sponsorsByLab = data;
+                populateSponsors(esrlLabSelect.value);
+            });
 
         // Function to populate sponsors based on the selected lab
         function populateSponsors(selectedLab) {
@@ -191,11 +174,6 @@
         // Populate sponsors on lab change
         esrlLabSelect.addEventListener('change', function() {
             populateSponsors(this.value);
-        });
-
-        // Populate sponsors on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            populateSponsors(esrlLabSelect.value);
         });
 
         document.getElementById('agreementForm').addEventListener('submit', async function(event) {
