@@ -321,7 +321,17 @@ class UpdateAgreementRequest(BaseModel):
     last_renewal_date: datetime  # New field for last renewal date
 
 @app.put("/api/agreements/{email}")
-async def update_agreement(email: str, request: UpdateAgreementRequest):
+async def update_agreement(
+    email: str,
+    request: UpdateAgreementRequest,
+    credentials: HTTPBasicCredentials = Depends(security)
+):
+    # Use already loaded environment variables
+    if not GITHUB_TOKEN:
+        raise HTTPException(status_code=403, detail="GITHUB_TOKEN missing in environment.")
+
+    authenticate_user(credentials)
+
     session = SessionLocal()
     user_agreement = session.query(UserAgreement).filter(UserAgreement.email == email).first()
     if not user_agreement:
@@ -332,7 +342,7 @@ async def update_agreement(email: str, request: UpdateAgreementRequest):
     user_agreement.esrl_lab = request.esrl_lab
     user_agreement.role = request.role
     user_agreement.agreed = request.agreed
-    user_agreement.last_renewal_date = request.last_renewal_date  # Update the last renewal date
+    user_agreement.last_renewal_date = request.last_renewal_date
     session.commit()
     return {"message": "Agreement updated successfully"}
 
@@ -530,13 +540,9 @@ from dotenv import dotenv_values
 
 @app.delete("/api/agreements/{email}")
 async def delete_agreement(email: str, credentials: HTTPBasicCredentials = Depends(security)):
-    # Check for local .env with GITHUB_TOKEN before allowing delete
-    local_env_path = r"C:\Users\renn.valo\Documents\SourceCode\PythonProjects\GitHubApprovals\.env"
-    if not os.path.exists(local_env_path):
-        raise HTTPException(status_code=403, detail="Local .env file with GITHUB_TOKEN is required to delete users.")
-    env_vars = dotenv_values(local_env_path)
-    if not env_vars.get("GITHUB_TOKEN"):
-        raise HTTPException(status_code=403, detail="GITHUB_TOKEN missing in local .env file.")
+    # Use already loaded environment variables
+    if not GITHUB_TOKEN:
+        raise HTTPException(status_code=403, detail="GITHUB_TOKEN missing in environment.")
 
     authenticate_user(credentials)
     
@@ -553,12 +559,17 @@ async def delete_agreement(email: str, credentials: HTTPBasicCredentials = Depen
 def authenticate_user(credentials: HTTPBasicCredentials):
     correct_username = os.getenv("EMAIL_ADDRESS")
     correct_password = os.getenv("EMAIL_PASSWORD")
+    if not correct_username or not correct_password:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server authentication configuration is missing.",
+        )
     if not (credentials.username == correct_username and credentials.password == correct_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Basic"},
-        )    
+        )  
 
 def send_final_confirmation_email(user_email, sponsor):
     stakeholders = get_stakeholders(sponsor)
