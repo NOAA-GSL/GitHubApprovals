@@ -114,7 +114,7 @@ NOTE:  Now that the server has been converted you can just start it manually wit
 ```docker run --rm -p 8000:8000 -v /data:/data github-approvals```
 
 ```docker run --rm -d -p 8000:8000 -v /data:/data github-approvals``` 
-to run as a server without a console
+to run as a server without a console.
 
 
 ### Access the Application: Open your browser and navigate to
