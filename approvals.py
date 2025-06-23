@@ -1,4 +1,15 @@
 """Aprovals API for GitHub access at NOAA GSL
+
+This API allows users to submit agreements for GitHub access, get approvals from stakeholders, and manage user agreements.
+It uses FastAPI for the web framework, SQLAlchemy for database interactions, and APScheduler for background tasks.
+It also includes basic authentication and email notifications for approvals and disapprovals.
+
+Dependencies:
+- FastAPI
+- SQLAlchemy
+- APScheduler
+- smtplib (for sending emails)
+- pandas (for exporting agreements to CSV)
 author: Renn Valo
 date: 03/1/2025
 Version: 5.0
