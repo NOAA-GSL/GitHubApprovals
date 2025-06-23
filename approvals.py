@@ -10,6 +10,21 @@ Dependencies:
 - APScheduler
 - smtplib (for sending emails)
 - pandas (for exporting agreements to CSV)
+
+Configuration:
+- The API uses environment variables to manage sensitive information like database URLs and email credentials.
+- The database is set up using SQLAlchemy with a SQLite backend.
+- Email notifications are sent using Gmail's SMTP server with SSL.
+
+Endpoints:
+- GET /: Displays the agreement form.
+- POST /submit_agreement/: Submits a new user agreement.
+- GET /approve_user/{email}/{approver_id}: Approves a user agreement.
+- GET /refuse_user/{email}/{approver_id}: Refuses a user agreement.
+- GET /browse_agreements: Displays all agreements in a table format.
+- PUT /api/agreements/{email}: Updates an existing agreement.
+- DELETE /api/agreements/{email}: Deletes an existing agreement.
+- GET /download-agreements/: Downloads all agreements as a CSV file.
 author: Renn Valo
 date: 03/1/2025
 Version: 5.0
