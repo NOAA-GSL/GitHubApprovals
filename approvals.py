@@ -36,7 +36,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, func, Text
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
@@ -55,9 +55,18 @@ import pandas as pd
 import threading
 import time
 
-# Define stakeholders globally  -changing this will change who gets contacted.
-def get_stakeholders(sponsor):
-    return ["jenny.fox@noaa.gov", "Greg.Pratt@noaa.gov", "Shannon.M.Johnston@noaa.gov", sponsor, "renn.valo@noaa.gov"]
+# Updated get_stakeholders to use lab and .env
+
+def get_stakeholders(lab, sponsor):
+    env_var = f"STAKEHOLDERS_{lab.upper()}"
+    stakeholders_str = os.getenv(env_var)
+    if not stakeholders_str:
+        raise ValueError(f"No stakeholders defined for lab: {lab}")
+    stakeholders = [email.strip() for email in stakeholders_str.split(",") if email.strip()]
+    # Add sponsor and admin email as before
+    stakeholders.append(sponsor)
+    stakeholders.append("renn.valo@noaa.gov")
+    return stakeholders
     # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
     # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
 
@@ -274,7 +283,7 @@ def send_stakeholder_approval_emails(user_email):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    stakeholders = get_stakeholders(user.sponsor)
+    stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
     tokens = [user.approval_token2, user.approval_token3, user.approval_token4]
 
     # Extract first and last name from sponsor email
@@ -321,7 +330,7 @@ def send_reminder_emails(user_email):
     if not user or (user.systemowner and user.accountadmin and user.isso and user.sponsorid):
         return
 
-    stakeholders = get_stakeholders(user.sponsor)
+    stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
     for idx, stakeholder in enumerate(stakeholders, start=1):
         if not getattr(user, f"approved{idx}"):
             approval_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/{user_email}/{idx}"
@@ -442,7 +451,7 @@ async def approve_user(email: str, approver_id: int, token: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    stakeholders = get_stakeholders(user.sponsor)
+    stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
     
     # Check if the user has already been approved by all approvers
     if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
@@ -482,7 +491,7 @@ async def approve_user(email: str, approver_id: int, token: str):
     if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
         user.final_approval_timestamp = datetime.utcnow()
         session.commit()
-        send_final_confirmation_email(user.email, user.sponsor)
+        send_final_confirmation_email(user.email, user.sponsor, user.esrl_lab)
 
     return {"message": "Your approval has been received and the request will now continue through the approval process. Once the candidate is either approved or denied, you'll receive an update via email with access status confirmation."}
 
@@ -493,7 +502,7 @@ async def refuse_user(email: str, approver_id: int, token: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    stakeholders = get_stakeholders(user.sponsor)
+    stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
 
     # Check if the user has already been approved by all approvers
     if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
@@ -608,8 +617,8 @@ def authenticate_user(credentials: HTTPBasicCredentials):
             headers={"WWW-Authenticate": "Basic"},
         )  
 
-def send_final_confirmation_email(user_email, sponsor):
-    stakeholders = get_stakeholders(sponsor)
+def send_final_confirmation_email(user_email, sponsor, lab):
+    stakeholders = get_stakeholders(lab, sponsor)
     send_email(user_email, "GitHub Access Granted", "You have been granted an account on GitHub!")
     for stakeholder in stakeholders:
         send_email(stakeholder, "User Approved", f"{user_email} has been granted an account on GitHub.")
