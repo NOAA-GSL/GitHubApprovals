@@ -478,13 +478,13 @@ async def approve_user(email: str, approver_id: int, token: str):
         user.approval_timestamp2 = datetime.utcnow()
         user.approver_email2 = stakeholders[0]
     elif approver_id == 3:
-        user.accountadmin = stakeholders[2] 
+        user.accountadmin = stakeholders[1] 
         user.approval_timestamp3 = datetime.utcnow()
-        user.approver_email3 = stakeholders[2]
+        user.approver_email3 = stakeholders[1]
     elif approver_id == 4:
-        user.isso = stakeholders[1] 
+        user.isso = stakeholders[2] 
         user.approval_timestamp4 = datetime.utcnow()
-        user.approver_email4 = stakeholders[1]
+        user.approver_email4 = stakeholders[2]
 
     session.commit()
 
@@ -619,7 +619,16 @@ def authenticate_user(credentials: HTTPBasicCredentials):
 
 def send_final_confirmation_email(user_email, sponsor, lab):
     stakeholders = get_stakeholders(lab, sponsor)
-    send_email(user_email, "GitHub Access Granted", "You have been granted an account on GitHub!")
+    
+    # Send access granted email with link to policy document
+    granted_message = (
+        "You have been granted an account on GitHub!\n\n"
+        "Please review the GSL Onboarding Documents to get started:\n"
+        "https://docs.google.com/document/d/1JuoRV9g2jOnbaGsy2EXJQ_8sPcSpYNEzqUqkvgghtp8/edit?tab=t.0\n\n"
+        "If you have any questions, contact your sponsor or the GSL ITS Team."
+    )
+    send_email(user_email, "GitHub Access Granted", granted_message)
+    
     for stakeholder in stakeholders:
         send_email(stakeholder, "User Approved", f"{user_email} has been granted an account on GitHub.")
 
