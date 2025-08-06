@@ -1,3 +1,7 @@
+#author: Renn Valo
+#date: 08/1/2025
+#Version: 5.0
+
 import requests
 import os
 import smtplib
