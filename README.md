@@ -149,7 +149,7 @@ All major features and endpoints are documented above. For the latest details, s
 
 ## Notifications
 
-The `notification/dependabotalerts.py` script provides automated notifications for critical and high-severity Dependabot alerts across all repositories in the organization. Its main purpose is to keep developers, information owners, and managers up to date on the latest security vulnerabilities and required actions.
+The `notification/dependabotalerts_scheduling.py` script provides automated notifications for critical and high-severity Dependabot alerts across all repositories in the organization. Its main purpose is to keep developers, information owners, and managers up to date on the latest security vulnerabilities and required actions.
 
 ### What It Does
 
