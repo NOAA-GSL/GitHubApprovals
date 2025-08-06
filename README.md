@@ -176,4 +176,67 @@ The `notification/dependabotalerts_scheduling.py` script provides automated noti
 - Automates the notification process, reducing manual effort and improving response times to vulnerabilities.
 - Maintains a clear record of alerts and notifications for auditing and review.
 
-For details on configuration and customization, see `notification/dependabotalerts.py` and the associated CSV file. This notification system is a key part of keeping the organization secure and responsive to GitHub security advisories.
+
+## Support & Troubleshooting Guide
+
+This section is intended to help new developers support and maintain the GitHub Approvals application and its notification system. It covers common issues, security considerations, and step-by-step troubleshooting advice.
+
+### 1. Environment & Configuration Issues
+
+- **.env File Missing or Misconfigured**: Ensure the `.env` file exists in the project root and contains valid values for `GITHUB_TOKEN`, `EMAIL_ADDRESS`, and `EMAIL_PASSWORD`. Never commit `.env` to version control.
+- **Environment Variables Not Loaded**: If you see errors about missing tokens or email credentials, check that `load_dotenv()` is called before accessing environment variables.
+- **App Passwords for Gmail**: If using Gmail, set up an App Password for `EMAIL_PASSWORD` rather than your main account password for better security and reliability.
+
+### 2. GitHub API Issues
+
+- **Invalid or Expired Token**: If API requests fail, verify that `GITHUB_TOKEN` is valid and has the necessary permissions (repo, security_events, etc.).
+- **Rate Limiting**: GitHub may rate-limit requests. If you see HTTP 403 or 429 errors, reduce request frequency or handle retries with exponential backoff.
+- **API Changes**: GitHub may update endpoints or response formats. If parsing errors occur, check the latest GitHub API documentation and update code accordingly.
+
+### 3. Email Sending Issues
+
+- **Authentication Errors**: If emails fail to send, check that `EMAIL_ADDRESS` and `EMAIL_PASSWORD` are correct and that the sender is authorized. For Gmail, ensure the account allows SMTP and less secure app access if needed.
+- **Spam/Rate Limits**: Sending many emails quickly may trigger spam filters or rate limits. Space out notifications and monitor for bounce-backs.
+- **Unverified Recipients**: Emails are sent to addresses from the CSV file. If emails bounce, verify the CSV data and confirm addresses with stakeholders.
+
+### 4. Data & File Issues
+
+- **CSV File Not Found or Malformed**: If the script cannot find or read `informationowners.csv`, check the file path and format. The CSV should have `username` and `email` columns.
+- **Sensitive Data Exposure**: Never log or print sensitive data (tokens, passwords, emails) in production. Secure logs and restrict access.
+
+### 5. Security Considerations
+
+- **Protect Secrets**: Keep `.env` and CSV files out of version control and restrict file permissions.
+- **Input Validation**: Always validate and sanitize data loaded from files or user input to prevent injection or corruption.
+- **Error Handling**: Avoid exposing sensitive details in error messages. Use generic messages for users and detailed logs for admins.
+
+### 6. Common Failure Scenarios & Fixes
+
+| Problem | Likely Cause | How to Fix |
+|---------|--------------|------------|
+| Missing GITHUB_TOKEN | .env not loaded or token missing | Add token to .env, call load_dotenv() |
+| Email not sending | Wrong credentials, SMTP blocked | Check .env, use App Password, verify SMTP settings |
+| API request fails | Invalid token, rate limit | Check token, handle rate limits, check permissions |
+| CSV not found | Wrong path or missing file | Verify file location and format |
+| Emails bounce | Invalid addresses in CSV | Update CSV, verify with users |
+| Too many emails sent | Large CSV, no throttling | Add rate limiting, monitor email logs |
+| Sensitive info in logs | Debug prints in code | Remove or secure logging |
+
+### 7. Best Practices for Support
+
+- Always test changes in a development environment before deploying to production.
+- Keep dependencies up to date and monitor for security advisories.
+- Document any changes to environment variables, CSV formats, or notification logic.
+- Regularly audit logs and access controls for sensitive data.
+- Communicate with stakeholders about notification schedules and data accuracy.
+
+### 8. Getting Help
+
+- For issues with the GitHub API, consult the [GitHub REST API documentation](https://docs.github.com/en/rest).
+- For email issues, refer to your email provider's SMTP documentation (e.g., Gmail SMTP).
+- For Python errors, check the traceback and review recent code changes.
+- Reach out to previous maintainers or the DevOps team for historical context or access issues.
+
+---
+
+By following this guide, new developers can quickly diagnose and resolve common problems, maintain security, and ensure reliable operation of the GitHub Approvals and notification system.
