@@ -341,6 +341,11 @@ def send_reminder_emails(user_email):
 async def get_agreement_form(request: Request):
     return templates.TemplateResponse("agreement_form.html", {"request": request})
 
+@app.get("/status", response_class=HTMLResponse)
+async def status_page(request: Request):
+    """Placeholder status page. Replace contents of templates/status.html later."""
+    return templates.TemplateResponse("status.html", {"request": request})
+
 @app.get("/browse_agreements", response_class=HTMLResponse)
 async def browse_agreements(request: Request):
     session = SessionLocal()
