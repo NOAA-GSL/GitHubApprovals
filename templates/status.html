@@ -42,14 +42,88 @@
       text-decoration: none;
     }
     .btn:hover { background: #0056b3; }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 8px;
+      margin-top: 32px;
+    }
+    th, td {
+      padding: 12px 10px;
+      background: #f9fbff;
+      border-radius: 6px;
+      text-align: left;
+    }
+    th {
+      background: #e3eaf6;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .status-circle {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      margin-right: 8px;
+      vertical-align: middle;
+      cursor: pointer;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+      transition: box-shadow 0.2s;
+    }
+    .status-waiting {
+      background: orange;
+    }
+    .status-denied {
+      background: #e74c3c;
+    }
+    .status-circle:hover {
+      box-shadow: 0 0 0 3px #b3d1ff;
+    }
+    .user-email {
+      color: #555;
+      font-size: 0.97em;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Request Status</h1>
-    <p class="note">This is a placeholder status page. You can customize this template later.</p>
+    <p class="note">Below are users whose approval is still pending or denied.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>User Name</th>
+          <th>Email</th>
+          <th>Approval Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+          <tr>
+            <td>{{ user.full_name }}</td>
+            <td><span class="user-email">{{ user.email }}</span></td>
+            <td>
+              {% if user.status == "waiting" %}
+                <a href="/progress/{{ user.email }}">
+                  <span class="status-circle status-waiting" title="Waiting for decision"></span>
+                </a>
+                Waiting
+              {% elif user.status == "denied" %}
+                <a href="/progress/{{ user.email }}">
+                  <span class="status-circle status-denied" title="Denied"></span>
+                </a>
+                Denied
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
     <div class="actions">
-      <a class="btn" href="/githubapprovals/">Back to form</a>
+      <a class="btn" href="/">Back to form</a>
     </div>
   </div>
 </body>

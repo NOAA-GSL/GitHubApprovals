@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 24px;
+      color: #222;
+    }
+    h1 {
+      margin-bottom: 18px;
+      font-size: 32px;
+      letter-spacing: .5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 6px;
+    }
+    thead th {
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 1px;
+      font-weight: 600;
+      color: #555;
+      padding: 10px 12px;
+      background: #eef1f5;
+      border: none;
+    }
+    tbody tr {
+      transition: background .18s ease, transform .18s ease;
+    }
+    tbody tr:nth-child(odd) { background: #ffffff; }
+    tbody tr:nth-child(even) { background: #f6f8fb; }
+    tbody tr:hover { background: #e5eef9; }
+    td {
+      padding: 10px 12px;
+      border: none;
+      font-size: 14px;
+    }
+    td:first-child { font-weight: 600; }
+    .denied { color: #b30000; font-weight: 600; }
+    .status-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #dbeafe;
+      color: #1e3a8a;
+    }
+    .status-pill.denied {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .wrapper {
+      box-shadow: 0 4px 16px -4px rgba(0,0,0,.08);
+      border-radius: 12px;
+      padding: 4px 6px 10px;
+      background: linear-gradient(145deg, #f9fafb, #f0f4f8);
+    }
+    @media (max-width: 760px) {
+      table, thead, tbody, th, td, tr { display: block; }
+      thead { display: none; }
+      tbody tr { margin-bottom: 10px; border-radius: 12px; padding: 8px 10px; }
+      td { padding: 4px 0; }
+      td::before {
+        content: attr(data-label) ": ";
+        font-weight: 600;
+        color: #555;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Dashboard</h1>
+  <div class="wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>User Name</th>
+          <th>Sponsor</th>
+          <th>Organization</th>
+          <th>Role</th>
+          <th>Approval Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set denied = 'Denied' in row.approval_status %}
+          <tr>
+            <td data-label="User Name">{{ row.user_name }} ({{ row.email }})</td>
+            <td data-label="Sponsor">{{ row.sponsor }}</td>
+            <td data-label="Organization">{{ row.organization }}</td>
+            <td data-label="Role">{{ row.role }}</td>
+            <td data-label="Approval Status">
+              <span class="status-pill {% if denied %}denied{% endif %}">{{ row.approval_status }}</span>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

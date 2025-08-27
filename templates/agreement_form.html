@@ -6,7 +6,7 @@
     <title>Agreement Form</title>
     <style>
         body {
-            background-image: url('/githubapprovals/images/earth.jpg');
+            background-image: url('/images/earth.jpg');
             background-size: cover;
             background-repeat: no-repeat;
             background-attachment: fixed;
@@ -15,7 +15,7 @@
             padding: 0;
             color: rgb(5, 26, 110)
         }
-        
+
         .logo {
             position: absolute;
             top: 20px;
@@ -45,7 +45,7 @@
             margin: auto;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        
+
         input[type="text"], input[type="email"], select, button {
             display: block;
             width: 100%;
@@ -54,32 +54,32 @@
             border-radius: 5px;
             border: 1px solid #ccc;
         }
-        
+
         .checkbox-container {
             text-align: left;
         }
-        
+
         .checkbox-container div {
             display: flex;
             align-items: center;
             margin-bottom: 10px;
         }
-        
+
         .checkbox-container input[type="checkbox"] {
             margin-right: 10px;
         }
-        
+
         button {
             background-color: #007bff;
             color: white;
             border: none;
             cursor: pointer;
         }
-        
+
         button:hover {
             background-color: #0056b3;
         }
-        
+
         h1 { 
             text-align: center; 
             font-size: 64px; 
@@ -96,10 +96,10 @@
 </head>
 <body>
     <div class="logo">
-        <img src="/githubapprovals/images/noaa_logo.png">
+        <img id="noaaLogo" src="" alt="NOAA Logo">
     </div>
     <div class="top-actions">
-        <a href="/githubapprovals/status" aria-label="View status">Status</a>
+        <a id="statusLink" href="#" aria-label="View status">Status</a>
     </div>
     <h1>GitHub Request Form</h1>
     <form id="agreementForm">
@@ -168,7 +168,6 @@
     <button type="submit">Submit</button>
         <div id="message"></div>
     </form>
-    
 
     <script>
         let sponsorsByLab = {};
@@ -176,8 +175,27 @@
         const esrlLabSelect = document.getElementById('esrl_lab');
         const sponsorSelect = document.getElementById('sponsor');
 
-        // Fetch the sponsors mapping from the backend
-        fetch('/githubapprovals/api/lab_sponsors')
+        const basePrefix = window.location.pathname.startsWith('/githubapprovals')
+                ? '/githubapprovals/'
+                : '/';
+
+            // Join helper that skips external URLs and prevents double slashes
+        function withBase(p) {
+            if (/^https?:\/\//i.test(p)) return p;        // external links untouched
+            const clean = String(p).replace(/^\/+/, '');  // remove leading slashes
+            return basePrefix + clean;
+        }
+    
+        // Point static assets and internal links to correct base
+        document.getElementById('noaaLogo').src = withBase('images/noaa_logo.png');
+        document.getElementById('statusLink').href = withBase('status');
+        // Override background image path to respect base
+        document.body.style.backgroundImage = `url('${withBase('images/earth.jpg')}')`;
+
+        const apiPath = withBase('api/lab_sponsors');
+        const submitPath = withBase('submit_agreement');
+
+        fetch(apiPath)
             .then(response => response.json())
             .then(data => {
                 sponsorsByLab = data;
@@ -208,7 +226,7 @@
             const data = new URLSearchParams(formData);
 
             try {
-                const response = await fetch('/githubapprovals/submit_agreement/', {
+                const response = await fetch(submitPath, {
                     method: 'POST',
                     body: data
                 });
@@ -216,6 +234,12 @@
                 const result = await response.json();
                 if (response.ok) {
                     document.getElementById('message').innerText = result.message;
+                    if (result.redirect_url) {
+                        // Redirect to progress page (cache-bust param)
+                        const bust = Date.now();
+                        window.location.href = result.redirect_url + '?v=' + bust;
+                        return;
+                    }
                 } else {
                     document.getElementById('message').innerText = result.detail;
                 }
