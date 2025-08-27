@@ -5,9 +5,6 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Denver
 
-# Set environment variables to avoid interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
 # Install Python and other dependencies
 RUN apt-get update && \
     apt-get install -y python3 python3-pip build-essential libssl-dev libffi-dev python3-dev tzdata && \
@@ -27,10 +24,12 @@ RUN pip3 install fastapi==0.88.0 \
                  pydantic>=1.10.13 \
                  python-multipart==0.0.5 \
                  requests \
+                 pillow \
                  schedule
 
 # Copy the approvals.py file into the root directory of the container
 COPY approvals.py /approvals.py
+COPY verification_progress_gif.py /verification_progress_gif.py
 #NOTE: flipping this copy you can test a green or blue version of the code
 #COPY blue_version.py /approvals.py
 
@@ -49,7 +48,7 @@ RUN mkdir -p /data /templates /images
 # Copy the templates and images into the root directory of the container
 COPY templates /templates
 COPY images /images
-#COPY agreement.db /agreement.db
+COPY agreement.db /agreement.db
 #COPY .env /.env
 
 # Expose port 8000

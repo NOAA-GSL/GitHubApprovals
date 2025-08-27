@@ -1,6 +1,10 @@
 """Aprovals API for GitHub access at NOAA GSL
 
-This API allows users to submit agreements for GitHub access, get approvals from stakeholders, and manage user agreements.
+This API allows users to submit agreements for GitH# Set database URL based on environment
+if IS_DEVELOPMENT:
+    DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
+else:
+    DATABASE_URL = "sqlite:////data/agreement.db"  # Production database pathb access, get approvals from stakeholders, and manage user agreements.
 It uses FastAPI for the web framework, SQLAlchemy for database interactions, and APScheduler for background tasks.
 It also includes basic authentication and email notifications for approvals and disapprovals.
 
@@ -54,6 +58,10 @@ from pydantic import BaseModel
 import pandas as pd
 import threading
 import time
+from verification_progress_gif import create_progress_gif
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 # Updated get_stakeholders to use lab and .env
 
@@ -70,8 +78,18 @@ def get_stakeholders(lab, sponsor):
     # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
     # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
 
-#app = FastAPI()
-app = FastAPI(root_path="https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/")
+
+# Check if we're in development or production mode
+IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development") == "development"
+
+# Initialize FastAPI with root_path for production
+if IS_DEVELOPMENT:
+    app = FastAPI()  # No root path in development
+    logging.info("Running in DEVELOPMENT mode")
+else:
+    app = FastAPI(root_path="/githubapprovals")  # Add root path in production
+    logging.info("Running in PRODUCTION mode")
+
 security = HTTPBasic() #adding security to endpoints that need it.
 
 # List of allowed origins (single domain)
@@ -89,8 +107,13 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
-# DATABASE_URL = "sqlite:///./data/agreement.db"
-DATABASE_URL = "sqlite:////data/agreement.db" # setting path for production server drive mapping
+# Set database URL based on environment
+if IS_DEVELOPMENT:
+    DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
+else:
+    DATABASE_URL = "sqlite:////data/agreement.db"  # Production database path
+logging.info(f"Using database URL: {DATABASE_URL}")
+
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -100,8 +123,6 @@ templates = Jinja2Templates(directory="templates")
 # Serve static files from the /data directory 
 app.mount("/images", StaticFiles(directory="images"), name="images")
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 
 # Load environment variables
 #load_dotenv()
@@ -344,13 +365,86 @@ async def get_agreement_form(request: Request):
 @app.get("/status", response_class=HTMLResponse)
 async def status_page(request: Request):
     """Placeholder status page. Replace contents of templates/status.html later."""
-    return templates.TemplateResponse("status.html", {"request": request})
+    #return templates.TemplateResponse("status.html", {"request": request})
+    session = SessionLocal()
+    try:
+        agreements = session.query(UserAgreement).all()
+        users = []
+        for ag in agreements:
+            status_dict = build_status_from_agreement(ag)
+            stages = list(status_dict.values())
+            denied = any(s["status"] == "denied" for s in stages)
+            approved_count = sum(1 for s in stages if s["status"] == "validated")
+            if approved_count == 4:
+                continue
+            if denied:
+                approval_status = "denied"
+            else:
+                approval_status = "waiting"
+            users.append({
+                "full_name": f"{ag.first_name} {ag.last_name}".strip(),
+                "email": ag.email,
+                "status": approval_status,
+            })
+        return templates.TemplateResponse("status.html", {"request": request, "users": users})
+    finally:
+        session.close()
+
 
 @app.get("/browse_agreements", response_class=HTMLResponse)
 async def browse_agreements(request: Request):
     session = SessionLocal()
-    agreements = session.query(UserAgreement).all()
-    return templates.TemplateResponse("browse_agreements.html", {"request": request, "agreements": agreements})
+    try:
+        agreements = session.query(UserAgreement).all()
+        logging.info(f"Found {len(agreements)} agreements in the database")
+        #print(f"Found {len(agreements)} agreements in the database")
+        return templates.TemplateResponse("browse_agreements.html", {"request": request, "agreements": agreements})
+    except Exception as e:
+        logging.error(f"Error in browse_agreements: {str(e)}")
+        #print(f"Error in browse_agreements: {str(e)}")
+        raise
+    finally:
+        session.close()
+
+def format_sponsor_name(sponsor):
+    """Return sponsor name from email or as-is if already a name."""
+    if sponsor and '@' in sponsor:
+        return sponsor.split('@')[0].replace('.', ' ').title()
+    return sponsor or ""
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Lightweight read-only dashboard summarizing agreements.
+
+    Columns: User Name, Sponsor, Organization (lab), Role, Approval Status.
+    Approval status format:
+      - "Denied (n/4 approved)" if any stage denied
+      - "n/4 approved" otherwise (n counts validated stages)
+    """
+    session = SessionLocal()
+    try:
+        agreements = session.query(UserAgreement).all()
+        rows = []
+        for ag in agreements:
+            status_dict = build_status_from_agreement(ag)
+            stages = list(status_dict.values())
+            denied = any(s["status"] == "denied" for s in stages)
+            approved_count = sum(1 for s in stages if s["status"] == "validated")
+            if denied:
+                approval_status = f"Denied ({approved_count}/4 approved)"
+            else:
+                approval_status = f"{approved_count}/4 approved"
+            rows.append({
+                "user_name": f"{ag.first_name} {ag.last_name}".strip(),
+                "email": ag.email,
+                "sponsor": format_sponsor_name(ag.sponsor),
+                "organization": ag.esrl_lab,
+                "role": ag.role,
+                "approval_status": approval_status,
+            })
+        return templates.TemplateResponse("dashboard.html", {"request": request, "rows": rows})
+    finally:
+        session.close()
 
 class UpdateAgreementRequest(BaseModel):
     first_name: str
@@ -386,6 +480,172 @@ async def update_agreement(
     session.commit()
     return {"message": "Agreement updated successfully"}
 
+def build_status_from_agreement(user_agreement: UserAgreement) -> dict:
+    """Build a normalized status summary for each approval stage.
+
+    A stage is considered:
+      - "validated" if the corresponding approval field is non-empty
+      - "denied"    if the corresponding disapproval field is non-empty (overrides approved)
+      - "waiting"   otherwise
+
+    Returns a dict shaped like:
+    {
+        "stage1": {"role": "sponsor",      "status": "validated|denied|waiting", "stamp": datetime|None},
+        "stage2": {"role": "systemowner",  ...},
+        "stage3": {"role": "accountadmin", ...},
+        "stage4": {"role": "isso",         ...},
+    }
+    """
+
+    stages = [
+        ("sponsor",      user_agreement.sponsorid,     user_agreement.dissponsor,      user_agreement.approval_timestamp1),
+        ("systemowner",  user_agreement.systemowner,   user_agreement.dissystemowner,  user_agreement.approval_timestamp2),
+        ("accountadmin", user_agreement.accountadmin,  user_agreement.disaccountadmin, user_agreement.approval_timestamp3),
+        ("isso",         user_agreement.isso,          user_agreement.disisso,         user_agreement.approval_timestamp4),
+    ]
+
+    def _is_flag_set(value) -> bool:
+        """Treat None, empty string, numeric 0, and string '0' as NOT set."""
+        return value not in (None, "", 0, "0")
+
+    status_dict: dict[str, dict] = {}
+    for idx, (role, approved_value, disapproved_value, stamp) in enumerate(stages, start=1):
+        if _is_flag_set(disapproved_value):
+            status = "denied"
+        elif _is_flag_set(approved_value):
+            status = "validated"
+        else:
+            status = "waiting"
+        status_dict[f"stage{idx}"] = {"role": role, "status": status, "stamp": stamp}
+
+    return status_dict
+
+# ---------------- GIF Generation Async Support -----------------
+GIF_JOBS = {}
+GIF_JOBS_LOCK = threading.Lock()
+
+def _start_gif_job(email: str):
+    with GIF_JOBS_LOCK:
+        job = GIF_JOBS.get(email)
+        if job and job.get("status") in ("running", "ready"):
+            return
+        GIF_JOBS[email] = {"status": "running", "gif_url": None, "error": None}
+
+    def worker():
+        session = SessionLocal()
+        try:
+            user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
+            if not user:
+                with GIF_JOBS_LOCK:
+                    GIF_JOBS[email]["status"] = "error"
+                    GIF_JOBS[email]["error"] = "User not found"
+                return
+            status_dict = build_status_from_agreement(user)
+            adapted = {k: {"status": v["status"], "timestamp": v["stamp"]} for k, v in status_dict.items()}
+            gif_url = create_progress_gif(adapted, show_turtle=True, output_filename=f"/images/progress_{user.id}.gif")
+            with GIF_JOBS_LOCK:
+                GIF_JOBS[email]["status"] = "ready"
+                GIF_JOBS[email]["gif_url"] = gif_url
+        except Exception as e:
+            logging.exception("GIF generation failed")
+            with GIF_JOBS_LOCK:
+                GIF_JOBS[email]["status"] = "error"
+                GIF_JOBS[email]["error"] = str(e)
+        finally:
+            session.close()
+    threading.Thread(target=worker, daemon=True).start()
+
+def _compute_percent_complete(email: str) -> int:
+    session = SessionLocal()
+    try:
+        user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
+        if not user:
+            return 0
+        status_dict = build_status_from_agreement(user)
+        total = 4
+        done = sum(1 for s in status_dict.values() if s["status"] in ("validated", "denied"))
+        return int(done / total * 100)
+    finally:
+        session.close()
+
+@app.post("/api/progress/{email}/generate")
+async def api_trigger_gif(email: str):
+    _start_gif_job(email)
+    with GIF_JOBS_LOCK:
+        return {"status": GIF_JOBS[email]["status"]}
+
+@app.get("/api/progress/{email}/status")
+async def api_progress_status(email: str, request: Request):
+    with GIF_JOBS_LOCK:
+        job = GIF_JOBS.get(email)
+    percent = _compute_percent_complete(email)
+
+    def _gif_fs_and_url_for_user_id(uid: int):
+        fs_path = os.path.join("images", f"progress_{uid}.gif")
+        url = request.url_for("images", path=f"progress_{uid}.gif")  # respects root_path
+        return fs_path, str(url)
+
+    # If no job, fall back to disk presence
+    if not job:
+        session = SessionLocal()
+        try:
+            user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
+        finally:
+            session.close()
+        if user:
+            fs_path, url = _gif_fs_and_url_for_user_id(user.id)
+            logging.info(f"Fallback status check: {fs_path} exists={os.path.exists(fs_path)}")
+            if os.path.exists(fs_path):
+                return {"status": "ready", "percent": percent, "gif_url": url}
+        return {"status": "not_started", "percent": percent}
+
+    # If job exists, prefer disk check to ensure URL correctness/availability
+    session = SessionLocal()
+    try:
+        user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
+    finally:
+        session.close()
+    if user:
+        fs_path, url = _gif_fs_and_url_for_user_id(user.id)
+        if os.path.exists(fs_path):
+            return {"status": job["status"], "percent": percent, "gif_url": url}
+
+    # Fallback to job payload if file not yet on disk
+    resp = {"status": job["status"], "percent": percent}
+    if job.get("gif_url"):
+        resp["gif_url"] = job["gif_url"]
+    if job.get("error"):
+        resp["error"] = job["error"]
+    return resp
+
+# In your FastAPI route
+@app.get("/status", response_class=HTMLResponse)
+async def status(request: Request):
+    session = SessionLocal()
+    users = session.query(UserAgreement).filter(UserAgreement).all()
+    user_list = []
+    for u in users:
+        user_list.append({
+            "full_name": f"{u.first_name.title()} {u.last_name.title()}",
+            "email": u.email,
+            "progress_gif_url": f"/images/progress_{u.email.replace('@','_at_').replace('.','_')}.gif"
+        })
+    return templates.TemplateResponse("status.html", {"request": request, "users": user_list})
+
+@app.get("/progress/{email}", response_class=HTMLResponse)
+async def progress_page(email: str, request: Request):
+    session = SessionLocal()
+    user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
+    if not user:
+        session.close()
+        raise HTTPException(status_code=404, detail="User not found")
+    full_name = f"{user.first_name} {user.last_name}".strip().title()
+    session.close()
+    cache_bust = int(datetime.utcnow().timestamp())
+    # Trigger generation asynchronously (idempotent)
+    _start_gif_job(email)
+    return templates.TemplateResponse("submission_progress.html", {"request": request, "full_name": full_name, "gif_url": None, "cache_bust": cache_bust, "email": email})
+
 @app.post("/submit_agreement/")
 async def submit_agreement(
     email: str = Form(...),
@@ -407,10 +667,10 @@ async def submit_agreement(
     session = SessionLocal()
     try:
         user_agreement = session.query(UserAgreement).filter(UserAgreement.email == email).first()
-
         if user_agreement:
             logging.error("Agreement already submitted for this email")
-            raise HTTPException(status_code=400, detail="Agreement already submitted for this email. You should be hearing back shortly.")
+            return {"message":"Agreement already submitted for this email. The progress is being tracked.",
+                    "redirect_url": f"/progress/{email}"}
 
         # Create the user agreement in the database
         user_agreement = UserAgreement(
@@ -439,7 +699,7 @@ async def submit_agreement(
             raise HTTPException(status_code=500, detail="Failed to send approval emails")
 
         logging.info("Agreement submitted successfully")
-        return {"message": "Agreement submitted. Awaiting approval."}
+        return {"message": "Agreement submitted. Awaiting approval.", "redirect_url": f"/progress/{email}"}
     except HTTPException as e:
         logging.error(f"HTTPException: {e.detail}")
         raise e
@@ -565,13 +825,29 @@ def download_agreements():
 # new endpoint to get the list of labs and their sponsors
 @app.get("/api/lab_sponsors")
 async def get_lab_sponsors():
-    df = pd.read_csv("/lab_sponsors.csv")
-    sponsors_by_lab = {}
-    for _, row in df.iterrows():
-        lab = row['lab']
-        sponsor = {"value": row['email'], "text": row['name']}
-        sponsors_by_lab.setdefault(lab, []).append(sponsor)
-    return sponsors_by_lab
+    logging.info("get_lab_sponsors endpoint called")
+    try:
+        # Try local development path first
+        csv_path = "lab_sponsors.csv"
+        logging.info(f"Trying local development path: {csv_path}")
+        if not os.path.exists(csv_path):
+            # If not found, try production path
+            csv_path = "/lab_sponsors.csv"
+            logging.info(f"Trying production path: {csv_path}")
+            if not os.path.exists(csv_path):
+                logging.error("Could not find lab_sponsors.csv in either path")
+                raise FileNotFoundError(f"Could not find lab_sponsors.csv in either local or production paths")
+        
+        df = pd.read_csv(csv_path)
+        sponsors_by_lab = {}
+        for _, row in df.iterrows():
+            lab = row['lab']
+            sponsor = {"value": row['email'], "text": row['name']}
+            sponsors_by_lab.setdefault(lab, []).append(sponsor)
+        return sponsors_by_lab
+    except Exception as e:
+        logging.error(f"Error reading lab sponsors: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Could not load lab sponsors: {str(e)}")
 
 # Add a new endpoint for users to renew their agreement
 @app.get("/renew/{email}")
