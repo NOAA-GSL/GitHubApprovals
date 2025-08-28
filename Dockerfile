@@ -48,7 +48,7 @@ RUN mkdir -p /data /templates /images
 # Copy the templates and images into the root directory of the container
 COPY templates /templates
 COPY images /images
-COPY agreement.db /agreement.db
+#COPY agreement.db /agreement.db
 #COPY .env /.env
 
 # Expose port 8000

@@ -106,16 +106,16 @@
             <td>{{ user.full_name }}</td>
             <td><span class="user-email">{{ user.email }}</span></td>
             <td>
-              {% if user.status == "waiting" %}
-                <a href="/progress/{{ user.email }}">
+              {% if user.status.startswith("Waiting") %}
+                <a href="{{ base_path }}progress/{{ user.email }}">
                   <span class="status-circle status-waiting" title="Waiting for decision"></span>
                 </a>
-                Waiting
-              {% elif user.status == "denied" %}
-                <a href="/progress/{{ user.email }}">
+                {{ user.status}}
+              {% elif user.status == "Denied" %}
+                <a href="{{ base_path }}progress/{{ user.email }}">
                   <span class="status-circle status-denied" title="Denied"></span>
                 </a>
-                Denied
+                {{ user.status }}
               {% endif %}
             </td>
           </tr>
