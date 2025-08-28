@@ -4,6 +4,7 @@ FROM ubuntu:22.04
 # Set environment variables to avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Denver
+ENV ENVIRONMENT=production
 
 # Install Python and other dependencies
 RUN apt-get update && \
