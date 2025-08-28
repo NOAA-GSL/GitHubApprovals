@@ -156,7 +156,6 @@
   <script>
     (function(){
       const email = '{{ email|default("") }}';
-      const isDev = window.location.hostname === 'localhost';
       const basePrefix = window.location.pathname.startsWith('/githubapprovals')
         ? '/githubapprovals/'
         : '/';

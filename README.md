@@ -8,7 +8,7 @@ The application consists of the following main components:
 
 1. **FastAPI Application**: The backend server that handles HTTP requests and responses.
 2. **Database**: SQLite database to store user agreements.
-3. **Templates**: HTML templates for rendering forms and browsing agreements.
+3. **Templates**: HTML templates for rendering forms, browsing agreements, and displaying progress/status.
 4. **Email Notifications**: Sending emails to stakeholders for approval and reminders.
 
 ## Files
@@ -16,20 +16,24 @@ The application consists of the following main components:
 - **approvals.py**: The main FastAPI application file.
 - **templates/agreement_form.html**: HTML template for submitting a new agreement.
 - **templates/browse_agreements.html**: HTML template for browsing existing agreements.
+- **templates/status.html**: HTML template for displaying the status of user agreements.
+- **templates/dashboard.html**: HTML template for displaying a lightweight dashboard summarizing agreements.
+- **templates/submission_progress.html**: HTML template for displaying the progress of GIF generation for a specific user.
+- **verification_progress_gif.py**: Python script for generating progress GIFs.
 
 ## How It Works
-Users goto https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/ and sign up.  Approvals are automattically sent out to all stakeholders for the approval process.
+Users go to https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/ and sign up. Approvals are automatically sent out to all stakeholders for the approval process.
 
 ### Submitting an Agreement
 
-1. **Form**: The user fills out the agreement form in agreement_form.html.
+1. **Form**: The user fills out the agreement form in `agreement_form.html`.
 2. **Submission**: The form data is submitted to the `/submit_agreement/` endpoint.
 3. **Validation**: The server validates the form data and stores it in the database.
 4. **Email Notifications**: Approval emails are sent to stakeholders.
 
 ### Browsing Agreements
 
-1. **Page**: The user navigates to the browse agreements page in browse_agreements.html.
+1. **Page**: The user navigates to the browse agreements page in `browse_agreements.html`.
 2. **Display**: The server fetches all agreements from the database and displays them in a table.
 3. **Editing**: Users can edit agreement details and save changes.
 
@@ -39,24 +43,26 @@ Users goto https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/ and sign up.  App
 2. **Approval/Refusal**: Stakeholders can approve or refuse the agreement by clicking the respective links.
 3. **Final Approval**: Once all stakeholders approve, a final confirmation email is sent to the user.
 
-### Removing an existing user
+### Removing an Existing User
 1. Go to the "Browse Agreements" page in the application.
 2. Locate the user you wish to remove and use the delete option provided in the interface.
 3. Deletion is now handled via the web form and requires authentication.
 4. The API endpoint `/api/agreements/{email}` (DELETE) is still available for programmatic removal, but the preferred method is through the application UI.
 
-
 ### Implementation
-The current implementation is on our internal Kubernetes network.  You can view the deployment on Rancher for those with access.
+The current implementation is on our internal Kubernetes network. You can view the deployment on Rancher for those with access.
 
 ### Sample Deployment Workflow
-1. **Build Container**: Build the container with your GitHub repo and package tag: ```docker build . -t ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr```
-2. **Push Container to GitHub**: Push the new tagged container to your repo: ```docker push ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr:latest```
+1. **Build Container**: Build the container with your GitHub repo and package tag:  
+   ```docker build . -t ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr```
+2. **Push Container to GitHub**: Push the new tagged container to your repo:  
+   ```docker push ghcr.io/noaa-gsl/githubapprovals/container_name-ghcr:latest```
 3. **Redeploy Container in Kubernetes**: This last step is handled via CLI or Rancher depending on preferences and current setup of your Kubernetes network at GSL.
-4. **Don't forget to push your updated code to the GitHub GSL repo if you've made changes to the container ```git push https://github.com/NOAA-GSL/GitHubApprovals.git```
+4. **Don't forget to push your updated code to the GitHub GSL repo if you've made changes to the container:  
+   ```git push https://github.com/NOAA-GSL/GitHubApprovals.git```
 
 ### Database Models
-The database model is defined in `approvals.py` using SQLAlchemy and SQLite. The `UserAgreement` model now includes expanded fields for tracking approvals, disapprovals, renewal dates, and stakeholder information:
+The database model is defined in `approvals.py` using SQLAlchemy and SQLite. The `UserAgreement` model now includes expanded fields for tracking approvals, disapprovals, renewal dates, and stakeholder information.
 
 ```python
 class UserAgreement(Base):
@@ -111,6 +117,11 @@ class UserAgreement(Base):
 - `GET /download-agreements/`: Downloads all agreements as a CSV file.
 - `GET /api/lab_sponsors`: Returns a list of labs and their sponsors for the form.
 - `GET /renew/{email}`: Allows users to renew their agreement.
+- `GET /status`: Displays the status of user agreements.
+- `GET /dashboard`: Displays a lightweight dashboard summarizing agreements.
+- `GET /progress/{email}`: Displays the progress page for a specific user.
+- `POST /api/progress/{email}/generate`: Triggers GIF generation for a user.
+- `GET /api/progress/{email}/status`: Checks the status of GIF generation for a user.
 
 **Email Notifications:**
 Emails are sent using the `smtplib` library. The `send_email` function handles the email sending process for approvals, reminders, and confirmations.
@@ -122,17 +133,15 @@ The application uses APScheduler to schedule reminder emails for pending approva
 Install Dependencies: Install the required Python packages.
 ```pip install fastapi sqlalchemy apscheduler pydantic pandas jinja2 python-dotenv```
 ### Run the Server: Start the FastAPI server.
-``` uvicorn approvals:app --host 0.0.0.0 --port 7860```
-NOTE:  You can also start the server manually with `python3 approvals.py` for Docker compatibility.
-### Alternative to running in locally - running in Docker by building the Dockerfile after cloning the Repo
+```uvicorn approvals:app --host 0.0.0.0 --port 7860```
+NOTE: You can also start the server manually with `python3 approvals.py` for Docker compatibility.
+### Alternative to running locally - running in Docker by building the Dockerfile after cloning the Repo
 ```docker build -t github-approvals .```
-
 
 ```docker run --rm -p 8000:8000 -v /data:/data github-approvals```
 
 ```docker run --rm -d -p 8000:8000 -v /data:/data github-approvals``` 
 to run as a server without a console.
-
 
 ### Access the Application: Open your browser and navigate to
 ```http://127.0.0.1:8000/```

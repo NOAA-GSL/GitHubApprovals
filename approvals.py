@@ -26,9 +26,16 @@ Endpoints:
 - GET /approve_user/{email}/{approver_id}: Approves a user agreement.
 - GET /refuse_user/{email}/{approver_id}: Refuses a user agreement.
 - GET /browse_agreements: Displays all agreements in a table format.
+- GET /status: Displays the status of user agreements.
+- GET /dashboard: Displays a lightweight dashboard summarizing agreements.
+- GET /progress/{email}: Displays the progress page for a specific user.
+- POST /api/progress/{email}/generate: Triggers GIF generation for a user.
+- GET /api/progress/{email}/status: Checks the status of GIF generation for a user.
+- GET /download-agreements/: Downloads all agreements as a CSV file.
+- GET /api/lab_sponsors: Retrieves the list of labs and their sponsors.
+- GET /renew/{email}: Renews a user's agreement.
 - PUT /api/agreements/{email}: Updates an existing agreement.
 - DELETE /api/agreements/{email}: Deletes an existing agreement.
-- GET /download-agreements/: Downloads all agreements as a CSV file.
 author: Renn Valo
 date: 03/1/2025
 Version: 5.0
@@ -95,7 +102,7 @@ security = HTTPBasic() #adding security to endpoints that need it.
 # List of allowed origins (single domain)
 origins = [
     "https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/",
-    "http://localhost:8000",
+    "http://localhost:8000/",
 ]
 
 # Add CORS middleware to the FastAPI application
@@ -108,10 +115,12 @@ app.add_middleware(
 )
 
 # Set database URL based on environment
-if IS_DEVELOPMENT:
-    DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
-else:
-    DATABASE_URL = "sqlite:////data/agreement.db"  # Production database path
+# if IS_DEVELOPMENT:
+#     DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
+# else:
+#     DATABASE_URL = "sqlite:////data/agreement.db"  # Production database path
+DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
+
 logging.info(f"Using database URL: {DATABASE_URL}")
 
 engine = create_engine(DATABASE_URL)
@@ -364,8 +373,7 @@ async def get_agreement_form(request: Request):
 
 @app.get("/status", response_class=HTMLResponse)
 async def status_page(request: Request):
-    """Placeholder status page. Replace contents of templates/status.html later."""
-    #return templates.TemplateResponse("status.html", {"request": request})
+    logging.info("Status page requested")
     session = SessionLocal()
     try:
         agreements = session.query(UserAgreement).all()
@@ -378,15 +386,22 @@ async def status_page(request: Request):
             if approved_count == 4:
                 continue
             if denied:
-                approval_status = "denied"
+                approval_status = "Denied"
             else:
-                approval_status = "waiting"
+                approval_status = "Waiting"
+            if approval_status == "Waiting":
+                pending_roles = [s["role"] for s in stages if s["status"] != "validated"]
+                if pending_roles:
+                    approval_status = f"Waiting ({', '.join(pending_roles)})"
             users.append({
                 "full_name": f"{ag.first_name} {ag.last_name}".strip(),
                 "email": ag.email,
                 "status": approval_status,
             })
-        return templates.TemplateResponse("status.html", {"request": request, "users": users})
+        return templates.TemplateResponse("status.html", 
+                                          {"request": request, 
+                                           "users": users, 
+                                           "base_path": request.scope.get("root_path", "/")})
     finally:
         session.close()
 
@@ -617,20 +632,6 @@ async def api_progress_status(email: str, request: Request):
     if job.get("error"):
         resp["error"] = job["error"]
     return resp
-
-# In your FastAPI route
-@app.get("/status", response_class=HTMLResponse)
-async def status(request: Request):
-    session = SessionLocal()
-    users = session.query(UserAgreement).filter(UserAgreement).all()
-    user_list = []
-    for u in users:
-        user_list.append({
-            "full_name": f"{u.first_name.title()} {u.last_name.title()}",
-            "email": u.email,
-            "progress_gif_url": f"/images/progress_{u.email.replace('@','_at_').replace('.','_')}.gif"
-        })
-    return templates.TemplateResponse("status.html", {"request": request, "users": user_list})
 
 @app.get("/progress/{email}", response_class=HTMLResponse)
 async def progress_page(email: str, request: Request):
