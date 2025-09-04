@@ -106,16 +106,32 @@
             <td>{{ user.full_name }}</td>
             <td><span class="user-email">{{ user.email }}</span></td>
             <td>
-              {% if user.status.startswith("Waiting") %}
-                <a href="{{ base_path }}progress/{{ user.email }}">
-                  <span class="status-circle status-waiting" title="Waiting for decision"></span>
-                </a>
-                {{ user.status}}
-              {% elif user.status == "Denied" %}
-                <a href="{{ base_path }}progress/{{ user.email }}">
-                  <span class="status-circle status-denied" title="Denied"></span>
-                </a>
-                {{ user.status }}
+              {% if user.gif_url %}
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <a href="{{ base_path }}progress/{{ user.email }}">
+                    <img src="{{ user.gif_url }}" 
+                    title="Click to see progress GIF for {{ user.full_name }}" 
+                    alt="Progress GIF for {{ user.full_name }}" 
+                    style="max-width: 150px; max-height: 50px;">
+                  </a>
+                  <span style="
+                    color: {% if user.status.startswith('Waiting') %}orange{% elif user.status == 'Denied' %}#e74c3c{% else %}inherit{% endif %};
+                    font-weight: bold;">
+                    {{ user.status }}
+                  </span>
+                </div>
+              {% else %}
+                {% if user.status.startswith("Waiting") %}
+                  <a href="{{ base_path }}progress/{{ user.email }}">
+                    <span class="status-circle status-waiting" title="Waiting for decision"></span>
+                  </a>
+                  <span style="color: orange; font-weight: bold;">{{ user.status }}</span>
+                {% elif user.status == "Denied" %}
+                  <a href="{{ base_path }}progress/{{ user.email }}">
+                    <span class="status-circle status-denied" title="Denied"></span>
+                  </a>
+                  <span style="color: #e74c3c; font-weight: bold;">{{ user.status }}</span>
+                {% endif %}
               {% endif %}
             </td>
           </tr>
@@ -123,7 +139,7 @@
       </tbody>
     </table>
     <div class="actions">
-      <a class="btn" href="/">Back to form</a>
+      <a class="btn" href="{{ base_path }}">Back to form</a>
     </div>
   </div>
 </body>

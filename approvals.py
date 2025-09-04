@@ -115,11 +115,11 @@ app.add_middleware(
 )
 
 # Set database URL based on environment
-# if IS_DEVELOPMENT:
-#     DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
-# else:
-#     DATABASE_URL = "sqlite:////data/agreement.db"  # Production database path
-DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
+if IS_DEVELOPMENT:
+    DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
+else:
+    DATABASE_URL = "sqlite:////data/agreement.db"  # Production database path
+# DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
 
 logging.info(f"Using database URL: {DATABASE_URL}")
 
@@ -397,11 +397,12 @@ async def status_page(request: Request):
                 "full_name": f"{ag.first_name} {ag.last_name}".strip(),
                 "email": ag.email,
                 "status": approval_status,
+                "gif_url": f"{request.scope.get('root_path', '')}/images/progress_{ag.id}.gif",
             })
         return templates.TemplateResponse("status.html", 
                                           {"request": request, 
                                            "users": users, 
-                                           "base_path": request.scope.get("root_path", "/")})
+                                           "base_path": get_base_path()})
     finally:
         session.close()
 
@@ -633,6 +634,12 @@ async def api_progress_status(email: str, request: Request):
         resp["error"] = job["error"]
     return resp
 
+def get_base_path() -> str:
+    if IS_DEVELOPMENT:
+        return "/"
+    else:
+        return "/githubapprovals/"
+
 @app.get("/progress/{email}", response_class=HTMLResponse)
 async def progress_page(email: str, request: Request):
     session = SessionLocal()
@@ -645,7 +652,7 @@ async def progress_page(email: str, request: Request):
     cache_bust = int(datetime.utcnow().timestamp())
     # Trigger generation asynchronously (idempotent)
     _start_gif_job(email)
-    return templates.TemplateResponse("submission_progress.html", {"request": request, "full_name": full_name, "gif_url": None, "cache_bust": cache_bust, "email": email})
+    return templates.TemplateResponse("submission_progress.html", {"request": request, "full_name": full_name, "gif_url": None, "cache_bust": cache_bust, "email": email, "base_path": get_base_path()})
 
 @app.post("/submit_agreement/")
 async def submit_agreement(
