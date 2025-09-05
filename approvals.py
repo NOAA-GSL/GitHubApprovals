@@ -115,11 +115,11 @@ app.add_middleware(
 )
 
 # Set database URL based on environment
-# if IS_DEVELOPMENT:
-#     DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
-# else:
-#     DATABASE_URL = "sqlite:////data/agreement.db"  # Production database path
-DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
+if IS_DEVELOPMENT:
+    DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
+else:
+    DATABASE_URL = "sqlite:////data/agreement.db"  # Production database path
+# DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
 
 logging.info(f"Using database URL: {DATABASE_URL}")
 
@@ -397,11 +397,12 @@ async def status_page(request: Request):
                 "full_name": f"{ag.first_name} {ag.last_name}".strip(),
                 "email": ag.email,
                 "status": approval_status,
+                "gif_url": f"{get_base_path()}images/progress_{ag.id}.gif",
             })
         return templates.TemplateResponse("status.html", 
                                           {"request": request, 
                                            "users": users, 
-                                           "base_path": request.scope.get("root_path", "/")})
+                                           "base_path": get_base_path()})
     finally:
         session.close()
 
@@ -558,6 +559,7 @@ def _start_gif_job(email: str):
             status_dict = build_status_from_agreement(user)
             adapted = {k: {"status": v["status"], "timestamp": v["stamp"]} for k, v in status_dict.items()}
             gif_url = create_progress_gif(adapted, show_turtle=True, output_filename=f"/images/progress_{user.id}.gif")
+            logging.info(f"GIF generated for {email}: {gif_url}")
             with GIF_JOBS_LOCK:
                 GIF_JOBS[email]["status"] = "ready"
                 GIF_JOBS[email]["gif_url"] = gif_url
@@ -633,6 +635,12 @@ async def api_progress_status(email: str, request: Request):
         resp["error"] = job["error"]
     return resp
 
+def get_base_path() -> str:
+    if IS_DEVELOPMENT:
+        return "/"
+    else:
+        return "/githubapprovals/"
+
 @app.get("/progress/{email}", response_class=HTMLResponse)
 async def progress_page(email: str, request: Request):
     session = SessionLocal()
@@ -645,7 +653,7 @@ async def progress_page(email: str, request: Request):
     cache_bust = int(datetime.utcnow().timestamp())
     # Trigger generation asynchronously (idempotent)
     _start_gif_job(email)
-    return templates.TemplateResponse("submission_progress.html", {"request": request, "full_name": full_name, "gif_url": None, "cache_bust": cache_bust, "email": email})
+    return templates.TemplateResponse("submission_progress.html", {"request": request, "full_name": full_name, "gif_url": None, "cache_bust": cache_bust, "email": email, "base_path": get_base_path()})
 
 @app.post("/submit_agreement/")
 async def submit_agreement(

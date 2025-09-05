@@ -672,6 +672,7 @@ def create_progress_gif(stage_statuses: Dict[str, Dict[str, Any]], show_turtle: 
         output_filename: override default output name.
     Returns: output file path.
     """
+    print("Creating progress GIF...")
     scenario = build_scenario_from_statuses(stage_statuses)
     if show_turtle:
         return generate_animation_scenario_with_turtle(scenario, show_turtle=True, output_filename=output_filename)
