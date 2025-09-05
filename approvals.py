@@ -102,6 +102,7 @@ security = HTTPBasic() #adding security to endpoints that need it.
 # List of allowed origins (single domain)
 origins = [
     "https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/",
+    "https://apps-prod.gsd.esrl.noaa.gov/githubapprovals/",
     "http://localhost:8000/",
 ]
 
@@ -141,6 +142,7 @@ ORG_NAME = "NOAA-GSL"  # Replace with your organization name
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # get token so you can use API
 HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
 TOTAL_LICENSES = 97  # Replace with your organization's total  -static value for now
+PREFIX_APP = "apps-prod.gsd.esrl.noaa.gov"
 
 # Database models
 class UserAgreement(Base):
@@ -203,7 +205,7 @@ def check_for_renewals():
         print(f"Last renewal date: {user.last_renewal_date}")
 
         # Generate the renewal link and message
-        renewal_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/renew/{user.email}"
+        renewal_link = f"https://{PREFIX_APP}/githubapprovals/renew/{user.email}"
         message = f"""
         Dear {user.first_name},
 
@@ -281,8 +283,8 @@ def send_approval_emails(user_email):
     sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
 
     # Send approval email to the sponsor first
-    approval_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/approve_user/{user_email}/1?token={user.approval_token1}"
-    refusal_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/refuse_user/{user_email}/1?token={user.approval_token1}"
+    approval_link = f"https://{PREFIX_APP}/githubapprovals/approve_user/{user_email}/1?token={user.approval_token1}"
+    refusal_link = f"https://{PREFIX_APP}/githubapprovals/refuse_user/{user_email}/1?token={user.approval_token1}"
     message = f"""
     Dear {sponsor_name},
 
@@ -324,8 +326,8 @@ def send_stakeholder_approval_emails(user_email):
     available_licenses = 106 - rowsindatabase
 
     for idx, (stakeholder, token) in enumerate(zip(stakeholders[1:], tokens), start=2):
-        approval_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/approve_user/{user_email}/{idx}?token={token}"
-        refusal_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/refuse_user/{user_email}/{idx}?token={token}"
+        approval_link = f"https://{PREFIX_APP}/githubapprovals/approve_user/{user_email}/{idx}?token={token}"
+        refusal_link = f"https://{PREFIX_APP}/githubapprovals/refuse_user/{user_email}/{idx}?token={token}"
 
         message = f"""
         Dear GitHub Stakeholder,
@@ -363,7 +365,7 @@ def send_reminder_emails(user_email):
     stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
     for idx, stakeholder in enumerate(stakeholders, start=1):
         if not getattr(user, f"approved{idx}"):
-            approval_link = f"https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/{user_email}/{idx}"
+            approval_link = f"https://{PREFIX_APP}/githubapprovals/{user_email}/{idx}"
             message = f"Reminder: Please approve the new user agreement from {user_email}. Click to approve: or ignore if you've already responded {approval_link}"
             send_email(stakeholder, "Reminder: User Agreement Approval Needed", message)
 
