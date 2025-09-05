@@ -541,6 +541,7 @@ GIF_JOBS = {}
 GIF_JOBS_LOCK = threading.Lock()
 
 def _start_gif_job(email: str):
+    logging.info(f"Starting GIF job for {email}")
     with GIF_JOBS_LOCK:
         job = GIF_JOBS.get(email)
         if job and job.get("status") in ("running", "ready"):
@@ -548,15 +549,18 @@ def _start_gif_job(email: str):
         GIF_JOBS[email] = {"status": "running", "gif_url": None, "error": None}
 
     def worker():
+        logging.info(f"GIF worker started for {email}")
         session = SessionLocal()
         try:
             user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
             if not user:
+                logging.error(f"User not found for email: {email}")
                 with GIF_JOBS_LOCK:
                     GIF_JOBS[email]["status"] = "error"
                     GIF_JOBS[email]["error"] = "User not found"
                 return
             status_dict = build_status_from_agreement(user)
+            logging.info(f"Status dict built for {email}: {status_dict}")
             adapted = {k: {"status": v["status"], "timestamp": v["stamp"]} for k, v in status_dict.items()}
             gif_url = create_progress_gif(adapted, show_turtle=True, output_filename=f"/images/progress_{user.id}.gif")
             logging.info(f"GIF generated for {email}: {gif_url}")
@@ -573,6 +577,7 @@ def _start_gif_job(email: str):
     threading.Thread(target=worker, daemon=True).start()
 
 def _compute_percent_complete(email: str) -> int:
+    logging.info(f"Computing percent complete for {email}")
     session = SessionLocal()
     try:
         user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
