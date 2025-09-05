@@ -397,7 +397,7 @@ async def status_page(request: Request):
                 "full_name": f"{ag.first_name} {ag.last_name}".strip(),
                 "email": ag.email,
                 "status": approval_status,
-                "gif_url": f"{request.scope.get('root_path', '')}/images/progress_{ag.id}.gif",
+                "gif_url": f"{get_base_path()}/images/progress_{ag.id}.gif",
             })
         return templates.TemplateResponse("status.html", 
                                           {"request": request, 
@@ -559,6 +559,7 @@ def _start_gif_job(email: str):
             status_dict = build_status_from_agreement(user)
             adapted = {k: {"status": v["status"], "timestamp": v["stamp"]} for k, v in status_dict.items()}
             gif_url = create_progress_gif(adapted, show_turtle=True, output_filename=f"/images/progress_{user.id}.gif")
+            logging.info(f"GIF generated for {email}: {gif_url}")
             with GIF_JOBS_LOCK:
                 GIF_JOBS[email]["status"] = "ready"
                 GIF_JOBS[email]["gif_url"] = gif_url
