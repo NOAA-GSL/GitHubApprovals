@@ -397,7 +397,7 @@ async def status_page(request: Request):
                 "full_name": f"{ag.first_name} {ag.last_name}".strip(),
                 "email": ag.email,
                 "status": approval_status,
-                "gif_url": f"{get_base_path()}/images/progress_{ag.id}.gif",
+                "gif_url": f"{get_base_path()}images/progress_{ag.id}.gif",
             })
         return templates.TemplateResponse("status.html", 
                                           {"request": request, 
