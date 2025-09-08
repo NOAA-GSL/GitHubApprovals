@@ -86,6 +86,24 @@
       color: #555;
       font-size: 0.97em;
     }
+
+    /* Spinner styles */
+    .spinner {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      border: 3px solid #f3f3f3; /* Light gray */
+      border-top: 3px solid #007bff; /* Blue */
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -107,12 +125,13 @@
             <td><span class="user-email">{{ user.email }}</span></td>
             <td>
               {% if user.gif_url %}
+                <!-- Show the GIF if it's ready -->
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <a href="{{ base_path }}progress/{{ user.email }}">
                     <img src="{{ user.gif_url }}" 
-                    title="Click to see progress GIF for {{ user.full_name }}" 
-                    alt="Progress GIF for {{ user.full_name }}" 
-                    style="max-width: 150px; max-height: 50px;">
+                         title="Click to see progress GIF for {{ user.full_name }}" 
+                         alt="Progress GIF for {{ user.full_name }}" 
+                         style="max-width: 150px; max-height: 50px;">
                   </a>
                   <span style="
                     color: {% if user.status.startswith('Waiting') %}orange{% elif user.status == 'Denied' %}#e74c3c{% else %}inherit{% endif %};
@@ -121,9 +140,10 @@
                   </span>
                 </div>
               {% else %}
+                <!-- Show the spinner while the GIF is being generated -->
                 {% if user.status.startswith("Waiting") %}
                   <a href="{{ base_path }}progress/{{ user.email }}">
-                    <span class="status-circle status-waiting" title="Waiting for decision"></span>
+                    <div class="spinner" title="Generating progress GIF..."></div>
                   </a>
                   <span style="color: orange; font-weight: bold;">{{ user.status }}</span>
                 {% elif user.status == "Denied" %}

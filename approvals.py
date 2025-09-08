@@ -373,6 +373,11 @@ def send_reminder_emails(user_email):
 async def get_agreement_form(request: Request):
     return templates.TemplateResponse("agreement_form.html", {"request": request})
 
+def _gif_fs_and_url_for_user_id(uid: int):
+    fs_path = os.path.join("images", f"progress_{uid}.gif")
+    url = f"{get_base_path()}images/progress_{uid}.gif"
+    return fs_path, url
+
 @app.get("/status", response_class=HTMLResponse)
 async def status_page(request: Request):
     logging.info("Status page requested")
@@ -395,11 +400,13 @@ async def status_page(request: Request):
                 pending_roles = [s["role"] for s in stages if s["status"] != "validated"]
                 if pending_roles:
                     approval_status = f"Waiting ({', '.join(pending_roles)})"
+            fs_path, gif_url = _gif_fs_and_url_for_user_id(ag.id)
+            gif_ready = os.path.exists(fs_path)  # Check if the GIF file exists
             users.append({
                 "full_name": f"{ag.first_name} {ag.last_name}".strip(),
                 "email": ag.email,
                 "status": approval_status,
-                "gif_url": f"{get_base_path()}images/progress_{ag.id}.gif",
+                "gif_url": gif_url if gif_ready else None,
             })
         return templates.TemplateResponse("status.html", 
                                           {"request": request, 
@@ -685,8 +692,7 @@ async def submit_agreement(
         user_agreement = session.query(UserAgreement).filter(UserAgreement.email == email).first()
         if user_agreement:
             logging.error("Agreement already submitted for this email")
-            return {"message":"Agreement already submitted for this email. The progress is being tracked.",
-                    "redirect_url": f"/progress/{email}"}
+            return {"message":"Agreement already submitted for this email. The progress is being tracked."}
 
         # Create the user agreement in the database
         user_agreement = UserAgreement(
@@ -715,7 +721,7 @@ async def submit_agreement(
             raise HTTPException(status_code=500, detail="Failed to send approval emails")
 
         logging.info("Agreement submitted successfully")
-        return {"message": "Agreement submitted. Awaiting approval.", "redirect_url": f"/progress/{email}"}
+        return {"message": "Agreement submitted. Awaiting approval."}
     except HTTPException as e:
         logging.error(f"HTTPException: {e.detail}")
         raise e

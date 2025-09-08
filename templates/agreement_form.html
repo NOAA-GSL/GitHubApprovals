@@ -194,7 +194,7 @@
         document.body.style.backgroundImage = `url('${withBase('images/earth.jpg')}')`;
 
         const apiPath = withBase('api/lab_sponsors');
-        const submitPath = withBase('submit_agreement');
+        const submitPath = withBase('/submit_agreement/');
 
         fetch(apiPath)
             .then(response => response.json())
