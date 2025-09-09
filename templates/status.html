@@ -143,7 +143,7 @@
                 <!-- Show the spinner while the GIF is being generated -->
                 {% if user.status.startswith("Waiting") %}
                   <a href="{{ base_path }}progress/{{ user.email }}">
-                    <div class="spinner" title="Generating progress GIF..."></div>
+                    <span class="status-circle status-waiting" title="Waiting"></span>
                   </a>
                   <span style="color: orange; font-weight: bold;">{{ user.status }}</span>
                 {% elif user.status == "Denied" %}
