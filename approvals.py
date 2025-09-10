@@ -92,10 +92,15 @@ IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development
 
 # Initialize FastAPI with root_path for production
 if IS_DEVELOPMENT:
-    app = FastAPI()  # No root path in development
+    app = FastAPI()  # Docs enabled in development
     logging.info("Running in DEVELOPMENT mode")
 else:
-    app = FastAPI(root_path="/githubapprovals")  # Add root path in production
+    app = FastAPI(
+        root_path="/githubapprovals",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None
+    )  # Add root path in production, docs disabled
     logging.info("Running in PRODUCTION mode")
 
 security = HTTPBasic() #adding security to endpoints that need it.
