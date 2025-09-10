@@ -71,6 +71,8 @@ from verification_progress_gif import create_progress_gif
 logging.basicConfig(level=logging.INFO)
 
 # Updated get_stakeholders to use lab and .env
+# Load environment variables
+load_dotenv('/data/.env')
 
 def get_stakeholders(lab, sponsor):
     env_var = f"STAKEHOLDERS_{lab.upper()}"
@@ -85,9 +87,8 @@ def get_stakeholders(lab, sponsor):
     # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
     # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
 
-
 # Check if we're in development or production mode
-IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development") == "development"
+IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development"
 
 # Initialize FastAPI with root_path for production
 if IS_DEVELOPMENT:
@@ -133,10 +134,6 @@ templates = Jinja2Templates(directory="templates")
 # Serve static files from the /data directory 
 app.mount("/images", StaticFiles(directory="images"), name="images")
 
-
-# Load environment variables
-#load_dotenv()
-load_dotenv('/data/.env')
 # Constants
 ORG_NAME = "NOAA-GSL"  # Replace with your organization name
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # get token so you can use API

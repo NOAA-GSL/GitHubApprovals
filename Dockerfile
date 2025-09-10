@@ -4,11 +4,12 @@ FROM ubuntu:22.04
 # Set environment variables to avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Denver
-ENV ENVIRONMENT=production
+#This is the production environment variable,that needs to be set in the .env
+#ENV ENVIRONMENT=production
 
-# Install Python and other dependencies
+# Install Python, nano, and other dependencies
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip build-essential libssl-dev libffi-dev python3-dev tzdata && \
+    apt-get install -y python3 python3-pip build-essential libssl-dev libffi-dev python3-dev tzdata nano && \
     apt-get install -y libatlas-base-dev && \
     apt-get install -y supervisor && \
     apt-get clean
@@ -49,7 +50,7 @@ RUN mkdir -p /data /templates /images
 # Copy the templates and images into the root directory of the container
 COPY templates /templates
 COPY images /images
-COPY agreement.db /data/agreement.db
+#COPY agreement.db /data/agreement.db
 #COPY .env /.env
 
 # Expose port 8000
