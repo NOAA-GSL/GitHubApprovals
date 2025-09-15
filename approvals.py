@@ -136,8 +136,8 @@ Base = declarative_base()
 
 templates = Jinja2Templates(directory="templates")
 
-# Serve static files from the /data directory 
-app.mount("/images", StaticFiles(directory="images"), name="images")
+# Serve static files from the /images directory (absolute path)
+app.mount("/images", StaticFiles(directory="/images"), name="images")
 
 # Constants
 ORG_NAME = "NOAA-GSL"  # Replace with your organization name
