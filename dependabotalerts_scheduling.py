@@ -27,6 +27,11 @@ EXCLUDE_USERS = [
     "greg-pratt-noaa"
 ]
 
+EXCLUSIVE_USERS = [
+    "rvnoaa",
+    "ygnoaa",
+]
+
 # Load email addresses from a CSV file
 def load_email_addresses(csv_file_path):
     email_map = {}
@@ -75,6 +80,52 @@ def send_email(recipient, subject, message):
         print("Failed to send email due to authentication error. Please check your email credentials.")
     except Exception as e:
         print(f"Failed to send email: {str(e)}")
+
+# Fetch repositories alerts regarding creating or removing repositories
+def get_repository_alerts(org):
+    url = f"https://api.github.com/orgs/{org}/events"
+    events = []
+    page = 1
+
+    while True:
+        response = requests.get(f"{url}&per_page=100&page={page}", headers=HEADERS)
+        response.raise_for_status()
+        current_page_events = response.json()
+        if not current_page_events:
+            break
+        for e in current_page_events:
+            if e['type'] in ['CreateEvent', 'DeleteEvent']:
+                if e['payload'].get('ref_type') == 'repository':
+                    events.append(e)
+        page += 1
+
+    return events
+
+# Function to send repository add/remove summary email
+def send_repository_add_remove_summary_email(events, email_map):
+    print("Running send_repository_add_remove_summary_email...")
+    if not events:
+        print("No repository add/remove events found.")
+        return
+    # Placeholder for actual implementation
+    subject = "Repository Add/Remove Summary"
+    message = "This is a summary of repository additions and removals."
+    for event in events:
+        action_time = event['created_at']
+        action = "created" if event['type'] == 'CreateEvent' else "deleted"
+        repo_name = event['repo']['name']
+        actor = event['actor']['login']
+        message += f"\n- Repository '{repo_name}' was {action} by {actor} at {action_time}."
+    # Send to a predefined list of recipients or a specific email
+    recipients = []
+
+    for user in EXCLUSIVE_USERS:
+        email = email_map.get(user.lower())  # Get email from the email map
+        if email:
+            recipients.append(email)
+
+    for recipient in recipients:
+        send_email(recipient, subject, message)
 
 # Fetch collaborators with admin access for a repository
 def get_collaborators_with_admin_access(owner, repo, email_map):
@@ -223,6 +274,11 @@ def main():
 
     # Schedule send_summary_to_excluded_users to run every 74 hours
     schedule.every(74).hours.do(send_summary_to_excluded_users, alerts_by_repo, email_map)
+
+    events = get_repository_alerts(org)
+    print(f"Fetched repository events: {events}")
+    # schedule send_repository_add_remove_summary_email to run every 48 hours
+    schedule.every(48).hours.do(send_repository_add_remove_summary_email, events, email_map)
 
     # Keep the script running to execute scheduled tasks
     while True:
