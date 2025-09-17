@@ -69,9 +69,6 @@ from verification_progress_gif import create_progress_gif
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-# Load environment variables
-#load_dotenv()
-load_dotenv('/data/.env')
 
 # Updated get_stakeholders to use lab and .env
 # Load environment variables
