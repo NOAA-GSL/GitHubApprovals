@@ -5,9 +5,9 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Denver
 
-# Install Python and other dependencies
+# Install Python, nano, and other dependencies
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip build-essential libssl-dev libffi-dev python3-dev tzdata && \
+    apt-get install -y python3 python3-pip build-essential libssl-dev libffi-dev python3-dev tzdata nano && \
     apt-get install -y libatlas-base-dev && \
     apt-get install -y supervisor && \
     apt-get clean

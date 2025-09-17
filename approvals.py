@@ -74,6 +74,8 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv('/data/.env')
 
 # Updated get_stakeholders to use lab and .env
+# Load environment variables
+load_dotenv('/data/.env')
 
 def get_stakeholders(lab, sponsor):
     env_var = f"STAKEHOLDERS_{lab.upper()}"
@@ -88,8 +90,9 @@ def get_stakeholders(lab, sponsor):
     # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
     # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
 
-
 # Check if we're in development or production mode
+IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development"
+
 BASE_URL = os.getenv("BASE_URL", "https://localhost:8000")
 # Initialize FastAPI with root_path for production
 app = FastAPI(root_path=os.getenv("BASE_URL", "/")) 
@@ -129,8 +132,6 @@ templates = Jinja2Templates(directory="templates")
 
 # Serve static files from the /data directory 
 app.mount("/images", StaticFiles(directory="images"), name="images")
-
-
 
 # Constants
 ORG_NAME = "NOAA-GSL"  # Replace with your organization name
@@ -540,6 +541,9 @@ def build_status_from_agreement(user_agreement: UserAgreement) -> dict:
     return status_dict
 
 # ---------------- GIF Generation Async Support -----------------
+
+# Set this to False to disable GIF animation generation
+ENABLE_GIF_ANIMATION = False
 GIF_JOBS = {}
 GIF_JOBS_LOCK = threading.Lock()
 
@@ -565,11 +569,17 @@ def _start_gif_job(email: str):
             status_dict = build_status_from_agreement(user)
             logging.info(f"Status dict built for {email}: {status_dict}")
             adapted = {k: {"status": v["status"], "timestamp": v["stamp"]} for k, v in status_dict.items()}
-            gif_url = create_progress_gif(adapted, show_turtle=True, output_filename=f"/images/progress_{user.id}.gif")
-            logging.info(f"GIF generated for {email}: {gif_url}")
-            with GIF_JOBS_LOCK:
-                GIF_JOBS[email]["status"] = "ready"
-                GIF_JOBS[email]["gif_url"] = gif_url
+            if ENABLE_GIF_ANIMATION:
+                gif_url = create_progress_gif(adapted, show_turtle=True, output_filename=f"/images/progress_{user.id}.gif")
+                logging.info(f"GIF generated for {email}: {gif_url}")
+                with GIF_JOBS_LOCK:
+                    GIF_JOBS[email]["status"] = "ready"
+                    GIF_JOBS[email]["gif_url"] = gif_url
+            else:
+                logging.info(f"GIF generation skipped for {email} (animation disabled)")
+                with GIF_JOBS_LOCK:
+                    GIF_JOBS[email]["status"] = "ready"
+                    GIF_JOBS[email]["gif_url"] = None
         except Exception as e:
             logging.exception("GIF generation failed")
             with GIF_JOBS_LOCK:
