@@ -69,6 +69,9 @@ from verification_progress_gif import create_progress_gif
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
+# Load environment variables
+#load_dotenv()
+load_dotenv('/data/.env')
 
 # Updated get_stakeholders to use lab and .env
 # Load environment variables
@@ -90,13 +93,9 @@ def get_stakeholders(lab, sponsor):
 # Check if we're in development or production mode
 IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development"
 
+BASE_URL = os.getenv("BASE_URL", "https://localhost:8000")
 # Initialize FastAPI with root_path for production
-if IS_DEVELOPMENT:
-    app = FastAPI()  # No root path in development
-    logging.info("Running in DEVELOPMENT mode")
-else:
-    app = FastAPI(root_path="/githubapprovals")  # Add root path in production
-    logging.info("Running in PRODUCTION mode")
+app = FastAPI(root_path=os.getenv("BASE_URL", "/")) 
 
 security = HTTPBasic() #adding security to endpoints that need it.
 
@@ -117,11 +116,11 @@ app.add_middleware(
 )
 
 # Set database URL based on environment
-if IS_DEVELOPMENT:
+#DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
+if "githubapprovals" not in BASE_URL:
     DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
 else:
     DATABASE_URL = "sqlite:////data/agreement.db"  # Production database path
-# DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
 
 logging.info(f"Using database URL: {DATABASE_URL}")
 
@@ -139,7 +138,6 @@ ORG_NAME = "NOAA-GSL"  # Replace with your organization name
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # get token so you can use API
 HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
 TOTAL_LICENSES = 97  # Replace with your organization's total  -static value for now
-PREFIX_APP = "apps-prod.gsd.esrl.noaa.gov"
 
 # Database models
 class UserAgreement(Base):
@@ -202,7 +200,7 @@ def check_for_renewals():
         print(f"Last renewal date: {user.last_renewal_date}")
 
         # Generate the renewal link and message
-        renewal_link = f"https://{PREFIX_APP}/githubapprovals/renew/{user.email}"
+        renewal_link = f"{BASE_URL}/renew/{user.email}"
         message = f"""
         Dear {user.first_name},
 
@@ -280,8 +278,8 @@ def send_approval_emails(user_email):
     sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
 
     # Send approval email to the sponsor first
-    approval_link = f"https://{PREFIX_APP}/githubapprovals/approve_user/{user_email}/1?token={user.approval_token1}"
-    refusal_link = f"https://{PREFIX_APP}/githubapprovals/refuse_user/{user_email}/1?token={user.approval_token1}"
+    approval_link = f"{BASE_URL}/approve_user/{user_email}/1?token={user.approval_token1}"
+    refusal_link = f"{BASE_URL}/refuse_user/{user_email}/1?token={user.approval_token1}"
     message = f"""
     Dear {sponsor_name},
 
@@ -323,8 +321,8 @@ def send_stakeholder_approval_emails(user_email):
     available_licenses = 106 - rowsindatabase
 
     for idx, (stakeholder, token) in enumerate(zip(stakeholders[1:], tokens), start=2):
-        approval_link = f"https://{PREFIX_APP}/githubapprovals/approve_user/{user_email}/{idx}?token={token}"
-        refusal_link = f"https://{PREFIX_APP}/githubapprovals/refuse_user/{user_email}/{idx}?token={token}"
+        approval_link = f"{BASE_URL}/approve_user/{user_email}/{idx}?token={token}"
+        refusal_link = f"{BASE_URL}/refuse_user/{user_email}/{idx}?token={token}"
 
         message = f"""
         Dear GitHub Stakeholder,
@@ -362,7 +360,7 @@ def send_reminder_emails(user_email):
     stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
     for idx, stakeholder in enumerate(stakeholders, start=1):
         if not getattr(user, f"approved{idx}"):
-            approval_link = f"https://{PREFIX_APP}/githubapprovals/{user_email}/{idx}"
+            approval_link = f"{BASE_URL}/{user_email}/{idx}"
             message = f"Reminder: Please approve the new user agreement from {user_email}. Click to approve: or ignore if you've already responded {approval_link}"
             send_email(stakeholder, "Reminder: User Agreement Approval Needed", message)
 
@@ -656,7 +654,7 @@ async def api_progress_status(email: str, request: Request):
     return resp
 
 def get_base_path() -> str:
-    if IS_DEVELOPMENT:
+    if "githubapprovals" not in BASE_URL:
         return "/"
     else:
         return "/githubapprovals/"
@@ -698,7 +696,7 @@ async def submit_agreement(
         user_agreement = session.query(UserAgreement).filter(UserAgreement.email == email).first()
         if user_agreement:
             logging.error("Agreement already submitted for this email")
-            return {"message":"Agreement already submitted for this email. The progress is being tracked."}
+            raise HTTPException(status_code=400, detail="Agreement already submitted for this email. You should be hearing back shortly.")
 
         # Create the user agreement in the database
         user_agreement = UserAgreement(
@@ -853,29 +851,13 @@ def download_agreements():
 # new endpoint to get the list of labs and their sponsors
 @app.get("/api/lab_sponsors")
 async def get_lab_sponsors():
-    logging.info("get_lab_sponsors endpoint called")
-    try:
-        # Try local development path first
-        csv_path = "lab_sponsors.csv"
-        logging.info(f"Trying local development path: {csv_path}")
-        if not os.path.exists(csv_path):
-            # If not found, try production path
-            csv_path = "/lab_sponsors.csv"
-            logging.info(f"Trying production path: {csv_path}")
-            if not os.path.exists(csv_path):
-                logging.error("Could not find lab_sponsors.csv in either path")
-                raise FileNotFoundError(f"Could not find lab_sponsors.csv in either local or production paths")
-        
-        df = pd.read_csv(csv_path)
-        sponsors_by_lab = {}
-        for _, row in df.iterrows():
-            lab = row['lab']
-            sponsor = {"value": row['email'], "text": row['name']}
-            sponsors_by_lab.setdefault(lab, []).append(sponsor)
-        return sponsors_by_lab
-    except Exception as e:
-        logging.error(f"Error reading lab sponsors: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Could not load lab sponsors: {str(e)}")
+    df = pd.read_csv("/lab_sponsors.csv")
+    sponsors_by_lab = {}
+    for _, row in df.iterrows():
+        lab = row['lab']
+        sponsor = {"value": row['email'], "text": row['name']}
+        sponsors_by_lab.setdefault(lab, []).append(sponsor)
+    return sponsors_by_lab
 
 # Add a new endpoint for users to renew their agreement
 @app.get("/renew/{email}")
