@@ -92,7 +92,11 @@ IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development
 
 BASE_URL = os.getenv("BASE_URL", "https://localhost:8000")
 # Initialize FastAPI with root_path for production
-app = FastAPI(root_path=os.getenv("BASE_URL", "/")) 
+app = FastAPI(root_path=os.getenv("BASE_URL", "/"),
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None
+    )  # Add root path in production, docs disabled
 
 security = HTTPBasic() #adding security to endpoints that need it.
 
@@ -127,8 +131,8 @@ Base = declarative_base()
 
 templates = Jinja2Templates(directory="templates")
 
-# Serve static files from the /data directory 
-app.mount("/images", StaticFiles(directory="images"), name="images")
+# Serve static files from the /images directory (absolute path)
+app.mount("/images", StaticFiles(directory="/images"), name="images")
 
 # Constants
 ORG_NAME = "NOAA-GSL"  # Replace with your organization name

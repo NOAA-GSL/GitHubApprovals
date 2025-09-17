@@ -13,16 +13,16 @@ RUN apt-get update && \
     apt-get clean
 
 # Install the Python dependencies directly
-RUN pip3 install fastapi==0.88.0 \
-                 uvicorn==0.18.3 \
-                 jinja2==3.1.5 \
-                 sqlalchemy==1.4.41 \
-                 apscheduler==3.9.1 \
-                 python-dotenv==0.21.0 \
-                 numpy==1.22 \
-                 pandas==1.3.5 \
-                 pydantic>=1.10.13 \
-                 python-multipart==0.0.5 \
+RUN pip3 install fastapi \
+                 uvicorn \
+                 jinja2 \
+                 sqlalchemy \
+                 apscheduler \
+                 python-dotenv \
+                 numpy \
+                 pandas \
+                 pydantic \
+                 python-multipart \
                  requests \
                  pillow \
                  schedule
