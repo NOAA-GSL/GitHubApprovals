@@ -270,15 +270,15 @@ def main():
     print(f"Alerts by repo: {alerts_by_repo}")
 
     # Schedule notify_collaborators_by_repo to run every 48 hours
-    schedule.every(48).hours.do(notify_collaborators_by_repo, alerts_by_repo)
+    schedule.every(48).hours.at("5:00").do(notify_collaborators_by_repo, alerts_by_repo)
 
     # Schedule send_summary_to_excluded_users to run every 74 hours
-    schedule.every(74).hours.do(send_summary_to_excluded_users, alerts_by_repo, email_map)
+    schedule.every(72).hours.at("9:15").do(send_summary_to_excluded_users, alerts_by_repo, email_map)
 
     events = get_repository_alerts(org)
     print(f"Fetched repository events: {events}")
     # schedule send_repository_add_remove_summary_email to run every 48 hours
-    schedule.every(48).hours.do(send_repository_add_remove_summary_email, events, email_map)
+    schedule.every(24).hours.at("13:00").do(send_repository_add_remove_summary_email, events, email_map)
 
     # Keep the script running to execute scheduled tasks
     while True:
