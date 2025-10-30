@@ -12,7 +12,9 @@ import time
 import csv  # Import CSV module
 from dotenv import load_dotenv
 import schedule  # Import the schedule library
+from datetime import datetime, timedelta
 
+print("Starting Dependabot Alerts Scheduler...very beginning")
 load_dotenv(dotenv_path="data/.env")
 
 # GitHub API token with necessary permissions
@@ -32,8 +34,11 @@ EXCLUSIVE_USERS = [
     "ygnoaa",
 ]
 
+print(f"Loaded EXCLUDE_USERS: {EXCLUDE_USERS}")
+
 # Load email addresses from a CSV file
 def load_email_addresses(csv_file_path):
+    print(f"Loading email addresses from {csv_file_path}...")
     email_map = {}
     try:
         with open(csv_file_path, mode='r', encoding='utf-8') as file:
@@ -81,32 +86,40 @@ def send_email(recipient, subject, message):
     except Exception as e:
         print(f"Failed to send email: {str(e)}")
 
-# Fetch repositories alerts regarding creating or removing repositories
-def get_repository_alerts(org):
+# Fetch repositories events regarding creating or removing repositories
+def get_repository_events(org, since=None):
     url = f"https://api.github.com/orgs/{org}/events"
     events = []
     page = 1
+    Exit_Now = False
 
-    while True:
-        response = requests.get(f"{url}&per_page=100&page={page}", headers=HEADERS)
+    while not Exit_Now:
+        response = requests.get(f"{url}?per_page=100&page={page}", headers=HEADERS)
         response.raise_for_status()
         current_page_events = response.json()
         if not current_page_events:
             break
         for e in current_page_events:
+            if e['created_at'] < since:
+                Exit_Now = True
+                break
             if e['type'] in ['CreateEvent', 'DeleteEvent']:
                 if e['payload'].get('ref_type') == 'repository':
-                    events.append(e)
+                    if since is None or e['created_at'] >= since:
+                        events.append(e)
         page += 1
 
     return events
 
 # Function to send repository add/remove summary email
-def send_repository_add_remove_summary_email(events, email_map):
+def send_repository_add_remove_summary_email(org, email_map):
     print("Running send_repository_add_remove_summary_email...")
+    since = (datetime.now() - timedelta(hours=24, minutes=15)).isoformat() + "Z"
+    events = get_repository_events(org, since=since)
     if not events:
         print("No repository add/remove events found.")
         return
+    print(f"Total of repository add/remove events found: {len(events)}")
     # Placeholder for actual implementation
     subject = "Repository Add/Remove Summary"
     message = "This is a summary of repository additions and removals."
@@ -115,7 +128,13 @@ def send_repository_add_remove_summary_email(events, email_map):
         action = "created" if event['type'] == 'CreateEvent' else "deleted"
         repo_name = event['repo']['name']
         actor = event['actor']['login']
-        message += f"\n- Repository '{repo_name}' was {action} by {actor} at {action_time}."
+        email = email_map.get(actor.lower(), "email not found")  # Get email from the email map
+        url = event['repo']['url']
+        description = event['payload'].get('description', 'No description provided')
+        message += f"\n- Repository '{repo_name}' was {action} by {actor}({email}) at {action_time}."
+        message += f"\n  Description: {description}\n"
+        message += f"  URL: {url}\n"
+        message += "----------------------------------------"
     # Send to a predefined list of recipients or a specific email
     recipients = []
 
@@ -138,13 +157,14 @@ def get_collaborators_with_admin_access(owner, repo, email_map):
     for collab in collaborators:
         if collab.get("permissions", {}).get("admin", False):
             login = collab["login"].strip().lower()  # Normalize to lowercase
-            email = email_map.get(login)
+            email = email_map.get(login)  # Get email from the email map
             # Debugging output
-            print(f"Processing collaborator: {login}, Found email: {email}")
+            #print(f"Processing collaborator: {login}, Found email: {email}")
             result.append({
                 "login": collab["login"],
                 "email": email
             })
+    print(f"Found {len(result)} collaborators with admin access for {repo}")
     return result
 
 # Fetch repositories with Dependabot alerts
@@ -154,7 +174,7 @@ def get_dependabot_alerts(org):
     page = 1
 
     while True:
-        response = requests.get(f"{url}&per_page=100&page={page}", headers=HEADERS)
+        response = requests.get(f"{url}?per_page=100&page={page}", headers=HEADERS)
         response.raise_for_status()
         current_page_alerts = response.json()
         if not current_page_alerts:
@@ -236,17 +256,15 @@ def send_summary_to_excluded_users(alerts_by_repo, email_map):
         else:
             print(f"No email found for excluded user: {user}")
 
-# Main function
-def main():
-    org = "NOAA-GSL"
-    csv_file_path = "informationowners.csv"  # Path to the CSV file
-    email_map = load_email_addresses(csv_file_path)  # Load email addresses from the CSV file
-    print(f"Loaded email map: {email_map}")
+alerts_by_repo = {}  # Global variable to store alerts by repository
 
+def update_alerts_by_repo(org, email_map):
+    global alerts_by_repo
     alerts = get_dependabot_alerts(org)
-    print(f"Fetched alerts: {alerts}")
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Fetched {len(alerts)} Dependabot alerts.")
+    updated_alerts_by_repo = {}
+    collaborators_cache = {}  # Cache to store collaborators for each repository
 
-    alerts_by_repo = {}
     for alert in alerts:
         repo_name = alert['repository']['name']
         owner = alert['repository']['owner']['login']
@@ -254,36 +272,53 @@ def main():
         alert_type = alert['security_advisory']['summary']  # Extract the alert type
 
         if severity in ["critical", "high"]:
-            collaborators = get_collaborators_with_admin_access(owner, repo_name, email_map)
-            filtered_collaborators = [
-                collab for collab in collaborators if collab['login'] not in EXCLUDE_USERS
-            ]
-            print(f"Collaborators for {repo_name}: {filtered_collaborators}")
-            if repo_name not in alerts_by_repo:
-                alerts_by_repo[repo_name] = []
-            alerts_by_repo[repo_name].append({
+            # Check if collaborators for this repository are already fetched
+            if repo_name not in collaborators_cache:
+                collaborators = get_collaborators_with_admin_access(owner, repo_name, email_map)
+                filtered_collaborators = [
+                    collab for collab in collaborators if collab['login'] not in EXCLUDE_USERS
+                ]
+                collaborators_cache[repo_name] = filtered_collaborators
+            else:
+                filtered_collaborators = collaborators_cache[repo_name]
+
+            if repo_name not in updated_alerts_by_repo:
+                updated_alerts_by_repo[repo_name] = []
+            updated_alerts_by_repo[repo_name].append({
                 "alert_type": alert_type,
                 "severity": severity,
                 "collaborators": filtered_collaborators
             })
 
-    print(f"Alerts by repo: {alerts_by_repo}")
+    alerts_by_repo = updated_alerts_by_repo  # Update the global variable
+    print(f"Updated alerts_by_repo with {len(alerts_by_repo)} repositories.")
 
-    # Schedule notify_collaborators_by_repo to run every 48 hours
-    schedule.every(48).hours.do(notify_collaborators_by_repo, alerts_by_repo)
+# Main function
+def main():
+    print("Starting Dependabot Alerts Scheduler...")
+    org = "NOAA-GSL"
+    csv_file_path = "informationowners.csv"  # Path to the CSV file
+    email_map = load_email_addresses(csv_file_path)  # Load email addresses from the CSV file
+    print(f"Loaded email map: {email_map}")
+
+    global alerts_by_repo
+    alerts_by_repo = {}
+
+    #print(f"Alerts by repo: {alerts_by_repo}")
+    schedule.every(1).days.at("00:00").do(update_alerts_by_repo, org, email_map)
+
+    schedule.every(2).days.at("00:05").do(notify_collaborators_by_repo, alerts_by_repo)
 
     # Schedule send_summary_to_excluded_users to run every 74 hours
-    schedule.every(74).hours.do(send_summary_to_excluded_users, alerts_by_repo, email_map)
+    schedule.every(3).days.at("00:10").do(send_summary_to_excluded_users, alerts_by_repo, email_map)
 
-    events = get_repository_alerts(org)
-    print(f"Fetched repository events: {events}")
-    # schedule send_repository_add_remove_summary_email to run every 48 hours
-    schedule.every(48).hours.do(send_repository_add_remove_summary_email, events, email_map)
+    # schedule send_repository_add_remove_summary_email to run every 24 hours
+    schedule.every(1).days.at("00:15").do(send_repository_add_remove_summary_email, org, email_map)
 
     # Keep the script running to execute scheduled tasks
     while True:
         schedule.run_pending()
-        time.sleep(1000)  # Sleep for a while to avoid busy waiting
+        time.sleep(60)  # Sleep for a while to avoid busy waiting
 
 if __name__ == "__main__":
     main()
