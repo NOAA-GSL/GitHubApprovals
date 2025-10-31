@@ -37,7 +37,8 @@ COPY verification_progress_gif.py /verification_progress_gif.py
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 #Copy the notifications files into the root directory of the container
-COPY dependabotalerts_scheduling.py /dependabotalerts_scheduling.py
+COPY dependabotalerts.py /dependabotalerts.py
+COPY dependabotalerts_runner.py /dependabotalerts_runner.py
 COPY informationowners.csv /informationowners.csv
 COPY lab_sponsors.csv /lab_sponsors.csv
 
