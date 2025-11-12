@@ -18,8 +18,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 # Import the existing main logic
 from dependabotalerts import main as run_dependabot
 
-RUN_INTERVAL_MINUTES = int(os.getenv("RUN_INTERVAL_MINUTES", "720"))  # default 12h
-SUMMARY_INTERVAL_DAYS = int(os.getenv("SUMMARY_RUN_INTERVAL_DAYS", "7"))  # weekly summary default
+RUN_INTERVAL_MINUTES = int(os.getenv("RUN_INTERVAL_MINUTES", "1440"))  # default 24h between regular runs
+SUMMARY_INTERVAL_DAYS = int(os.getenv("SUMMARY_RUN_INTERVAL_DAYS", "7"))  # weekly summary target
+
+# In-memory tracking of last summary run (process lifetime only)
+_last_summary_run = None  # type: datetime | None
 
 scheduler = BackgroundScheduler(
     executors={"default": ThreadPoolExecutor(5)},
@@ -29,10 +32,30 @@ scheduler = BackgroundScheduler(
 
 
 def _run_wrapper():
+    global _last_summary_run
     start = datetime.utcnow()
     print(f"[Runner] Starting dependabot notification run at {start.isoformat()}Z")
     try:
-        run_dependabot([])  # normal run (no arguments)
+        # Decide whether to include summary this cycle (first summary delayed until interval passes)
+        run_summary = False
+        if _last_summary_run is None:
+            # Establish baseline; do NOT run summary yet
+            _last_summary_run = start
+            print(f"[Runner] Initial baseline set at {start.isoformat()}Z; delaying first summary for {SUMMARY_INTERVAL_DAYS} days.")
+        else:
+            elapsed_days = (start - _last_summary_run).total_seconds() / 86400.0
+            if elapsed_days >= SUMMARY_INTERVAL_DAYS:
+                run_summary = True
+                print(f"[Runner] {elapsed_days:.2f} days since last summary/baseline >= {SUMMARY_INTERVAL_DAYS}; including summary.")
+            else:
+                print(f"[Runner] {elapsed_days:.2f} days since baseline < {SUMMARY_INTERVAL_DAYS}; skipping summary this run.")
+
+        if run_summary:
+            run_dependabot([])  # normal run includes collaborator + summary by default
+            _last_summary_run = start  # reset baseline
+        else:
+            run_dependabot(["--no-summary"])  # suppress summary, send per-repo notifications only
+
         print(f"[Runner] Run completed successfully at {datetime.utcnow().isoformat()}Z")
     except SystemExit as e:
         print(f"[Runner] Run exited with SystemExit code {e.code} at {datetime.utcnow().isoformat()}Z")
@@ -40,35 +63,15 @@ def _run_wrapper():
         print(f"[Runner] Run failed with unexpected error: {e}")
 
 
-def _run_summary_wrapper():
-    start = datetime.utcnow()
-    print(f"[Runner] Starting summary-only dependabot run at {start.isoformat()}Z")
-    try:
-        run_dependabot(["--summary-only"])  # summary only
-        print(f"[Runner] Summary run completed successfully at {datetime.utcnow().isoformat()}Z")
-    except SystemExit as e:
-        print(f"[Runner] Summary run exited with SystemExit code {e.code} at {datetime.utcnow().isoformat()}Z")
-    except Exception as e:
-        print(f"[Runner] Summary run failed with unexpected error: {e}")
-
-
 def main():
     print(f"[Runner] Initializing scheduler (interval {RUN_INTERVAL_MINUTES} minutes)")
-    # Regular cadence job
+    # Single job handles both regular and (periodic) summary logic
     scheduler.add_job(
         _run_wrapper,
         trigger=IntervalTrigger(minutes=RUN_INTERVAL_MINUTES),
-        id="dependabot_alerts_job",
+        id="dependabotalerts_combined_job",
         replace_existing=True,
-        next_run_time=datetime.utcnow()  # run immediately at start
-    )
-    # Weekly summary job
-    scheduler.add_job(
-        _run_summary_wrapper,
-        trigger=IntervalTrigger(days=SUMMARY_INTERVAL_DAYS),
-        id="dependabot_summary_job",
-        replace_existing=True,
-        next_run_time=datetime.utcnow() + timedelta(seconds=5)  # slight delay after first normal run
+        next_run_time=datetime.utcnow()  # immediate first run
     )
     scheduler.start()
     print("[Runner] Scheduler started. Press Ctrl+C to exit.")

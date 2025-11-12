@@ -198,72 +198,28 @@ def get_collaborators_with_admin_access(owner, repo, email_map):
 
 # Fetch repositories with Dependabot alerts
 def get_dependabot_alerts(org, max_pages=None, max_total=None):
-    """Fetch unique OPEN Dependabot alerts for an org.
-
-    Adds safeguards against duplicated pagination (observed repeated 100-item pages) by tracking
-    unique alert identifiers. Stops when:
-      - Page limit reached (diagnostic)
-      - Response empty
-      - No new unique open alerts found on a page (duplicate repetition)
-      - No 'next' rel in Link header
-      - Max total reached
-    """
-    base_url = f"https://api.github.com/orgs/{org}/dependabot/alerts?state=open&per_page=100"
-    alerts = []
-    seen_ids = set()
-    page = 1
-    while True:
-        if max_pages and page > max_pages:
-            print(f"[Dependabot] Reached diagnostic max pages limit ({max_pages}); stopping.")
-            break
-        url = f"{base_url}&page={page}"
-        print(f"[Dependabot] Fetching alerts page {page} for org {org}...")
-        try:
-            response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
-        except requests.RequestException as e:
-            print(f"[Dependabot] Request failed: {e}")
-            break
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as e:
-            print(f"[Dependabot] HTTP error on page {page}: {e} - body: {response.text[:300]}")
-            break
-        data = response.json()
-        if not isinstance(data, list):
-            print(f"[Dependabot] Unexpected response type (not list): {data}")
-            break
-        total_items = len(data)
-        if total_items == 0:
-            print("[Dependabot] Empty page; stopping.")
-            break
-        open_alerts = [a for a in data if a.get('state') == 'open']
-        new_alerts = []
-        dup_count = 0
-        for a in open_alerts:
-            # Determine a stable unique key. Official payload includes 'number' and 'dependency', but id should exist.
-            uid = a.get('id') or a.get('number') or a.get('ghsa_id') or f"{a.get('dependency', {}).get('package', {}).get('name')}:{a.get('security_vulnerability', {}).get('package', {}).get('name')}:{a.get('created_at')}"
-            if uid in seen_ids:
-                dup_count += 1
-                continue
-            seen_ids.add(uid)
-            new_alerts.append(a)
-        print(f"[Dependabot] Page {page}: {len(open_alerts)}/{total_items} open; {len(new_alerts)} new, {dup_count} duplicates.")
-        if not new_alerts:
-            print("[Dependabot] No new unique open alerts; assuming repeated pages and stopping.")
-            break
-        alerts.extend(new_alerts)
-        print(f"[Dependabot] Total unique open alerts accumulated: {len(alerts)}")
-        if max_total and len(alerts) >= max_total:
-            print(f"[Dependabot] Reached max_total {max_total}; truncating result.")
-            alerts = alerts[:max_total]
-            break
-        link_header = response.headers.get('Link', '')
-        has_next = 'rel="next"' in link_header
-        if not has_next:
-            print("[Dependabot] No 'next' link in headers; stopping pagination.")
-            break
-        page += 1
-    return alerts
+    """Fetch OPEN Dependabot alerts for an org (no pagination supported)."""
+    url = f"https://api.github.com/orgs/{org}/dependabot/alerts?state=open"
+    print(f"[Dependabot] Fetching all open alerts for org {org}...")
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"[Dependabot] Request failed: {e}")
+        return []
+    except requests.HTTPError as e:
+        print(f"[Dependabot] HTTP error: {e} - body: {response.text[:300]}")
+        return []
+    data = response.json()
+    if not isinstance(data, list):
+        print(f"[Dependabot] Unexpected response type (not list): {data}")
+        return []
+    open_alerts = [a for a in data if a.get('state') == 'open']
+    print(f"[Dependabot] Fetched {len(open_alerts)} open alerts.")
+    if max_total and len(open_alerts) > max_total:
+        open_alerts = open_alerts[:max_total]
+        print(f"[Dependabot] Truncated to max_total {max_total} alerts.")
+    return open_alerts
 
 # Notify collaborators (save to a Markdown file and send emails)
 def notify_collaborators_by_repo(alerts_by_repo):
