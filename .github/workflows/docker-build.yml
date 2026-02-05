@@ -39,27 +39,38 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: gitauthrunnertest
-          base: main
-          title: "Auto PR: Updates from gitauthrunnertest"
-          body: |
-            ## Automated Pull Request
-            
-            This PR was automatically created from the `gitauthrunnertest` branch.
-            
-            **Branch:** `gitauthrunnertest`
-            **Commit:** ${{ github.sha }}
-            **Triggered by:** @${{ github.actor }}
-            
-            ### Changes
-            Please review the changes and ensure all tests pass before merging.
-          labels: automated-pr
-          draft: false
+          fetch-depth: 0
+      
+      - name: Create or Update Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if PR already exists
+          PR_NUMBER=$(gh pr list --head gitauthrunnertest --base main --json number --jq '.[0].number')
+          
+          if [ -z "$PR_NUMBER" ]; then
+            echo "Creating new pull request..."
+            gh pr create \
+              --base main \
+              --head gitauthrunnertest \
+              --title "Auto PR: Updates from gitauthrunnertest" \
+              --body "## Automated Pull Request
+
+          This PR was automatically created from the \`gitauthrunnertest\` branch.
+
+          **Branch:** \`gitauthrunnertest\`
+          **Commit:** ${{ github.sha }}
+          **Triggered by:** @${{ github.actor }}
+
+          ### Changes
+          Please review the changes and ensure all tests pass before merging." \
+              --label automated-pr
+            echo "✅ Pull request created successfully"
+          else
+            echo "Pull request #$PR_NUMBER already exists - it will be automatically updated by the push"
+            echo "✅ Existing PR will be updated with latest changes"
+          fi
 
   build-and-test:
     runs-on: ubuntu-latest
