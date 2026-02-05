@@ -64,8 +64,7 @@ jobs:
           **Triggered by:** @${{ github.actor }}
 
           ### Changes
-          Please review the changes and ensure all tests pass before merging." \
-              --label automated-pr
+          Please review the changes and ensure all tests pass before merging."
             echo "✅ Pull request created successfully"
           else
             echo "Pull request #$PR_NUMBER already exists - it will be automatically updated by the push"
