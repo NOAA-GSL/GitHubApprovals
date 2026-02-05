@@ -2,8 +2,8 @@
 # Builds the GitHub Approvals container and pushes to GitHub Container Registry
 #
 # Triggers:
-#   - Push to main branch
-#   - Pull requests to main branch
+#   - Push to master branch
+#   - Pull requests to master branch
 #   - Manual trigger
 
 name: Docker Build and Push
@@ -11,7 +11,7 @@ name: Docker Build and Push
 on:
   push:
     branches:
-      - main
+      - master
       - gitauthrunnertest
     paths-ignore:
       - '**.md'
@@ -19,7 +19,7 @@ on:
       - 'SECURITY.md'
   pull_request:
     branches:
-      - main
+      - master
     paths-ignore:
       - '**.md'
   workflow_dispatch:
@@ -47,11 +47,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_API_TOKEN }}
         run: |
           # Check if there are differences between branches
-          git fetch origin main
-          DIFF_COUNT=$(git rev-list --count origin/main..HEAD)
+          git fetch origin master
+          DIFF_COUNT=$(git rev-list --count origin/master..HEAD)
           
           if [ "$DIFF_COUNT" -eq 0 ]; then
-            echo "⚠️ No differences between gitauthrunnertest and main - skipping PR creation"
+            echo "⚠️ No differences between gitauthrunnertest and master - skipping PR creation"
             echo "Push some changes to gitauthrunnertest first, then the PR will be created automatically"
             exit 0
           fi
@@ -59,12 +59,12 @@ jobs:
           echo "Found $DIFF_COUNT commit(s) to merge"
           
           # Check if PR already exists
-          PR_NUMBER=$(gh pr list --head gitauthrunnertest --base main --json number --jq '.[0].number')
+          PR_NUMBER=$(gh pr list --head gitauthrunnertest --base master --json number --jq '.[0].number')
           
           if [ -z "$PR_NUMBER" ]; then
             echo "Creating new pull request..."
             gh pr create \
-              --base main \
+              --base master \
               --head gitauthrunnertest \
               --title "Auto PR: Updates from gitauthrunnertest" \
               --body "## Automated Pull Request
@@ -192,7 +192,7 @@ jobs:
           docker rm test-container
 
       - name: Push to GitHub Container Registry
-        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/gitauthrunnertest')
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/gitauthrunnertest')
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -212,5 +212,5 @@ jobs:
           echo "| **Image** | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Pushed** | ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Pushed** | ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Tags** | ${{ steps.meta.outputs.tags }} |" >> $GITHUB_STEP_SUMMARY
