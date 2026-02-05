@@ -927,3 +927,4 @@ def send_final_confirmation_email(user_email, sponsor, lab):
 scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every three days
 
 # Test automated PR creation - 2026-02-05
+# Test from Gihub PR should be created without any user input
