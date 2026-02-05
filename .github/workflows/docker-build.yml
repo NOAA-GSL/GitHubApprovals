@@ -46,6 +46,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Check if there are differences between branches
+          git fetch origin main
+          DIFF_COUNT=$(git rev-list --count origin/main..HEAD)
+          
+          if [ "$DIFF_COUNT" -eq 0 ]; then
+            echo "⚠️ No differences between gitauthrunnertest and main - skipping PR creation"
+            echo "Push some changes to gitauthrunnertest first, then the PR will be created automatically"
+            exit 0
+          fi
+          
+          echo "Found $DIFF_COUNT commit(s) to merge"
+          
           # Check if PR already exists
           PR_NUMBER=$(gh pr list --head gitauthrunnertest --base main --json number --jq '.[0].number')
           
