@@ -29,6 +29,38 @@ env:
   IMAGE_NAME: noaa-gsl/githubapprovals/approvals-container-ghcr-test
 
 jobs:
+  create-pull-request:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/gitauthrunnertest' && github.event_name == 'push'
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gitauthrunnertest
+          base: main
+          title: "Auto PR: Updates from gitauthrunnertest"
+          body: |
+            ## Automated Pull Request
+            
+            This PR was automatically created from the `gitauthrunnertest` branch.
+            
+            **Branch:** `gitauthrunnertest`
+            **Commit:** ${{ github.sha }}
+            **Triggered by:** @${{ github.actor }}
+            
+            ### Changes
+            Please review the changes and ensure all tests pass before merging.
+          labels: automated-pr
+          draft: false
+
   build-and-test:
     runs-on: ubuntu-latest
     permissions:
