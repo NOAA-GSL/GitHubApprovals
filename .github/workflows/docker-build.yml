@@ -113,12 +113,12 @@ jobs:
           docker run --rm \
             -e ENVIRONMENT=test \
             -e BASE_URL=http://testserver \
-            -e GITHUB_TOKEN=test_token_12345 \
-            -e EMAIL_ADDRESS=test@example.com \
-            -e EMAIL_PASSWORD=test_password \
-            -e STAKEHOLDERS_PSD=stakeholder1@noaa.gov,stakeholder2@noaa.gov,stakeholder3@noaa.gov \
-            -e STAKEHOLDERS_GSD=stakeholder1@noaa.gov,stakeholder2@noaa.gov,stakeholder3@noaa.gov \
-            -e STAKEHOLDERS_ESRL=stakeholder1@noaa.gov,stakeholder2@noaa.gov,stakeholder3@noaa.gov \
+            -e GITHUB_TOKEN=${{ secrets.GH_API_TOKEN }} \
+            -e EMAIL_ADDRESS=${{ secrets.EMAIL_ADDRESS }} \
+            -e EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }} \
+            -e STAKEHOLDERS_PSD=${{ secrets.STAKEHOLDERS_PSD }} \
+            -e STAKEHOLDERS_GSD=${{ secrets.STAKEHOLDERS_GSD }} \
+            -e STAKEHOLDERS_ESRL=${{ secrets.STAKEHOLDERS_ESRL }} \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             github-approvals:ci \
@@ -170,9 +170,12 @@ jobs:
           echo "Testing container startup..."
           docker run -d --name test-container \
             -e ENVIRONMENT=test \
-            -e GITHUB_TOKEN=test_token \
-            -e EMAIL_ADDRESS=test@example.com \
-            -e EMAIL_PASSWORD=test_password \
+            -e GITHUB_TOKEN=${{ secrets.GH_API_TOKEN }} \
+            -e EMAIL_ADDRESS=${{ secrets.EMAIL_ADDRESS }} \
+            -e EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }} \
+            -e STAKEHOLDERS_PSD=${{ secrets.STAKEHOLDERS_PSD }} \
+            -e STAKEHOLDERS_GSD=${{ secrets.STAKEHOLDERS_GSD }} \
+            -e STAKEHOLDERS_ESRL=${{ secrets.STAKEHOLDERS_ESRL }} \
             github-approvals:ci
           sleep 15
           echo "Checking container logs..."
