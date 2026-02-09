@@ -928,5 +928,10 @@ scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every three d
 
 # Test automated PR creation - 2026-02-05
 # Test from Gihub PR should be created without any user input
+<<<<<<< HEAD
 # New test line 2026-06-10
 # Another test line for GitHub PR creation 2026-06-10
+=======
+#this is a new test
+# This is another test
+>>>>>>> 23e655576422ef9849b6c3d1f17c879a197bb447
