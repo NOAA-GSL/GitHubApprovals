@@ -926,12 +926,5 @@ def send_final_confirmation_email(user_email, sponsor, lab):
 #check_for_renewals()  # Initial check for renewals on launch of the server
 scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every three days
 
-# Test automated PR creation - 2026-02-05
-# Test from Gihub PR should be created without any user input
-<<<<<<< HEAD
-# New test line 2026-06-10
-# Another test line for GitHub PR creation 2026-06-10
-=======
-#this is a new test
-# This is another test
->>>>>>> 23e655576422ef9849b6c3d1f17c879a197bb447
+
+#testing workflow for sending emails to stakeholders when a user is approved by their sponsor
