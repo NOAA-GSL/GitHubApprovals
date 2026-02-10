@@ -129,6 +129,71 @@ Emails are sent using the `smtplib` library. The `send_email` function handles t
 ### Background Tasks
 The application uses APScheduler to schedule reminder emails for pending approvals and to check for users who need to renew their agreements. Renewal reminders are sent automatically every three days.
 
+### Logging
+
+The application uses comprehensive structured logging to track all approval workflow activities, making debugging and auditing easier.
+
+**Log Configuration:**
+- Logs are written to both console (for supervisord/Docker) and file
+- Log file location: `/var/log/approvals.log` (production) or `./approvals.log` (development)
+- Format: `TIMESTAMP - LEVEL - MESSAGE` with contextual information
+
+**Log Prefixes:**
+Logs are organized with prefixes for easy filtering:
+- `[APPROVAL]` - Agreement submissions, approvals, refusals, workflow state changes
+- `[EMAIL]` - All email operations (preparation, sending, success/failure)
+- `[STAKEHOLDER]` - Stakeholder resolution, role assignments, notifications
+- `[RENEWAL]` - Renewal checks, reminders, and user renewal actions
+
+**What Gets Logged:**
+Every log entry includes contextual information:
+- User email addresses
+- Approver IDs and roles (Sponsor, System Owner, Account Admin, ISSO)
+- Timestamps (ISO 8601 format)
+- Stakeholder lists with role assignments
+- Email recipients and subjects
+- Token generation (first 8 characters for security)
+- License availability counts
+- Approval/refusal decisions with timestamps
+
+**Log Levels:**
+- `INFO` - Normal workflow operations (submissions, approvals, emails sent)
+- `ERROR` - Failures (authentication errors, invalid tokens, email sending failures)
+- `DEBUG` - Detailed diagnostic information (token generation, stakeholder lookups, license counts)
+
+**Example Log Queries:**
+```bash
+# View all approval activity
+grep "[APPROVAL]" /var/log/approvals.log
+
+# View all emails sent
+grep "[EMAIL]" /var/log/approvals.log
+
+# Track a specific user through the workflow
+grep "user_email=john.doe@noaa.gov" /var/log/approvals.log
+
+# View only errors
+grep "ERROR" /var/log/approvals.log
+
+# View stakeholder operations
+grep "[STAKEHOLDER]" /var/log/approvals.log
+
+# View renewal activity
+grep "[RENEWAL]" /var/log/approvals.log
+```
+
+**Typical Approval Workflow Logs:**
+1. `[APPROVAL]` User submits agreement with details
+2. `[STAKEHOLDER]` Stakeholders resolved with role assignments
+3. `[EMAIL]` Sponsor approval email sent
+4. `[APPROVAL]` Sponsor approves with timestamp
+5. `[STAKEHOLDER]` Notifications sent to System Owner, Account Admin, ISSO
+6. `[EMAIL]` Each stakeholder receives approval email
+7. `[APPROVAL]` Each stakeholder approval recorded
+8. `[APPROVAL]` Final approval triggered when all approve
+9. `[EMAIL]` Access granted email sent to user
+10. `[EMAIL]` Confirmation emails sent to all stakeholders
+
 ### Running the Application
 Install Dependencies: Install the required Python packages.
 ```pip install fastapi sqlalchemy apscheduler pydantic pandas jinja2 python-dotenv```
