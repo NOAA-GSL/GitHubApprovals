@@ -28,7 +28,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: noaa-gsl/githubapprovals/approvals-container-ghcr
+  IMAGE_NAME: noaa-gsl/githubapprovals/approvals-container-ghcr-test
 
 jobs:
   create-pull-request:
