@@ -10,3 +10,7 @@ dependabotalerts9.py
 /notifications/informationowners.csv
 notifications
 public.crt
+
+# Coverage files
+.coverage
+coverage.xml
