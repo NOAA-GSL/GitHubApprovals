@@ -67,8 +67,18 @@ import threading
 import time
 from verification_progress_gif import create_progress_gif
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with file handler and structured format
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Console output for supervisord
+        logging.FileHandler(
+            '/var/log/approvals.log' if os.path.exists('/var/log') else './approvals.log',
+            mode='a'
+        )
+    ]
+)
 # Load environment variables
 #load_dotenv()
 load_dotenv('/data/.env')
@@ -78,14 +88,18 @@ load_dotenv('/data/.env')
 load_dotenv('/data/.env')
 
 def get_stakeholders(lab, sponsor):
+    logging.debug(f"[STAKEHOLDER] Resolving stakeholders for lab={lab}, sponsor={sponsor}")
     env_var = f"STAKEHOLDERS_{lab.upper()}"
+    logging.debug(f"[STAKEHOLDER] Looking up environment variable: {env_var}")
     stakeholders_str = os.getenv(env_var)
     if not stakeholders_str:
+        logging.error(f"[STAKEHOLDER] No stakeholders defined for lab: {lab} (env var: {env_var})")
         raise ValueError(f"No stakeholders defined for lab: {lab}")
     stakeholders = [email.strip() for email in stakeholders_str.split(",") if email.strip()]
     # Add sponsor and admin email as before
     stakeholders.append(sponsor)
     stakeholders.append("renn.valo@noaa.gov")
+    logging.info(f"[STAKEHOLDER] Resolved stakeholders for lab={lab}: System Owner={stakeholders[0]}, Account Admin={stakeholders[1]}, ISSO={stakeholders[2]}, Sponsor={stakeholders[3]}, Setup Admin={stakeholders[4]}")
     return stakeholders
     # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
     # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
@@ -186,21 +200,20 @@ scheduler.start()
 # Function to check for users who need to renew and send reminder emails
 def check_for_renewals():
     session = SessionLocal()
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] check_for_renewals() called")
+    logging.info(f"[RENEWAL] check_for_renewals() started at {datetime.utcnow().isoformat()}")
     
     # Fetch users who need renewal
     users_to_renew = session.query(UserAgreement).filter(
         UserAgreement.last_renewal_date <= datetime.utcnow() - timedelta(days=365)
     ).all()
-    print(f"Users to renew: {len(users_to_renew)}")
+    logging.info(f"[RENEWAL] Found {len(users_to_renew)} users needing renewal")
 
     for user in users_to_renew:
-        print(f"Checking email for: {user.email}")
-        print(f"Sending email to: {user.email}")
-        print(f"Last renewal date: {user.last_renewal_date}")
+        logging.info(f"[RENEWAL] Processing renewal for user_email={user.email}, last_renewal_date={user.last_renewal_date}")
 
         # Generate the renewal link and message
         renewal_link = f"{BASE_URL}/renew/{user.email}"
+        logging.debug(f"[RENEWAL] Generated renewal link for user_email={user.email}: {renewal_link}")
         message = f"""
         Dear {user.first_name},
 
@@ -224,18 +237,19 @@ def check_for_renewals():
             
         # Send email to the user
         send_email(user.email, "Agreement Renewal Reminder", message)
-        print(f"Email sent to: {user.email}")
+        logging.info(f"[EMAIL] Renewal reminder sent to user_email={user.email}")
 
     session.close()
 
 
 
 def send_email(recipient, subject, message):
-    print(f"Preparing to send email to {recipient} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    logging.debug(f"[EMAIL] Preparing to send email: recipient={recipient}, subject={subject}, from=github.gsl@noaa.gov")
     sender_email = os.getenv("EMAIL_ADDRESS")
     password = os.getenv("EMAIL_PASSWORD")
 
     if not sender_email or not password:
+        logging.error(f"[EMAIL] Email configuration missing for recipient={recipient}")
         raise HTTPException(status_code=500, detail="Email configuration is missing")
     
     #specify the alternative "from" email address
@@ -255,17 +269,21 @@ def send_email(recipient, subject, message):
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context, timeout=30) as server:
             server.login(sender_email, password)
             server.sendmail(sender_email, recipient, msg.as_string())
-            print(f"Email sent to: {recipient}")    
-    except smtplib.SMTPAuthenticationError:
+            logging.info(f"[EMAIL] Successfully sent email: recipient={recipient}, subject={subject}, timestamp={datetime.utcnow().isoformat()}")    
+    except smtplib.SMTPAuthenticationError as e:
+        logging.error(f"[EMAIL] SMTP authentication error for recipient={recipient}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to send email due to authentication error. Please check your email credentials.")
     except Exception as e:
+        logging.error(f"[EMAIL] Failed to send email to recipient={recipient}, subject={subject}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
     
 def send_approval_emails(user_email):
+    logging.info(f"[APPROVAL] Initiating sponsor approval email for user_email={user_email}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == user_email).first()
 
     if not user:
+        logging.error(f"[APPROVAL] User not found for user_email={user_email}")
         raise HTTPException(status_code=404, detail="User not found")
 
     user.approval_token1 = str(uuid.uuid4())
@@ -273,9 +291,11 @@ def send_approval_emails(user_email):
     user.approval_token3 = str(uuid.uuid4())
     user.approval_token4 = str(uuid.uuid4())
     session.commit()
+    logging.debug(f"[APPROVAL] Generated approval tokens for user_email={user_email}: token1={user.approval_token1[:8]}..., token2={user.approval_token2[:8]}..., token3={user.approval_token3[:8]}..., token4={user.approval_token4[:8]}...")
 
     # Extract first and last name from sponsor email
     sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
+    logging.info(f"[APPROVAL] Sponsor identified: sponsor_email={user.sponsor}, sponsor_name={sponsor_name}")
 
     # Send approval email to the sponsor first
     approval_link = f"{BASE_URL}/approve_user/{user_email}/1?token={user.approval_token1}"
@@ -301,13 +321,17 @@ def send_approval_emails(user_email):
     Best regards,
     Your Approval Team
     """
+    logging.info(f"[EMAIL] Sending sponsor approval request: recipient={user.sponsor}, user_email={user_email}, approval_link={approval_link}")
     send_email(user.sponsor, "User Agreement Approval Needed", message)
+    logging.info(f"[APPROVAL] Sponsor approval email sent successfully to sponsor={user.sponsor} for user_email={user_email}")
 
 def send_stakeholder_approval_emails(user_email):
+    logging.info(f"[STAKEHOLDER] Initiating stakeholder approval emails for user_email={user_email}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == user_email).first()
 
     if not user:
+        logging.error(f"[STAKEHOLDER] User not found for user_email={user_email}")
         raise HTTPException(status_code=404, detail="User not found")
 
     stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
@@ -315,14 +339,18 @@ def send_stakeholder_approval_emails(user_email):
 
     # Extract first and last name from sponsor email
     sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
+    logging.info(f"[STAKEHOLDER] Sponsor info: sponsor_name={sponsor_name}, sponsor_email={user.sponsor}, lab={user.esrl_lab}")
 
     # Get the number of active licenses from the database
     rowsindatabase = session.query(UserAgreement).count()
     available_licenses = 106 - rowsindatabase
+    logging.debug(f"[STAKEHOLDER] License info: active_licenses={rowsindatabase}, available_licenses={available_licenses}")
 
-    for idx, (stakeholder, token) in enumerate(zip(stakeholders[1:], tokens), start=2):
+    stakeholder_roles = ["System Owner", "Account Admin", "ISSO"]
+    for idx, (stakeholder, token, role) in enumerate(zip(stakeholders[1:], tokens, stakeholder_roles), start=2):
         approval_link = f"{BASE_URL}/approve_user/{user_email}/{idx}?token={token}"
         refusal_link = f"{BASE_URL}/refuse_user/{user_email}/{idx}?token={token}"
+        logging.info(f"[EMAIL] Preparing stakeholder approval email: approver_id={idx}, role={role}, stakeholder={stakeholder}, user_email={user_email}")
 
         message = f"""
         Dear GitHub Stakeholder,
@@ -348,13 +376,17 @@ def send_stakeholder_approval_emails(user_email):
         Your Approval Team
         """
         send_email(stakeholder, "User Agreement Approval Needed", message)
+        logging.info(f"[EMAIL] Stakeholder approval email sent: approver_id={idx}, role={role}, stakeholder={stakeholder}, user_email={user_email}")
 
+    logging.info(f"[STAKEHOLDER] All stakeholder approval emails sent for user_email={user_email}")
     scheduler.add_job(send_reminder_emails, 'interval', hours=48, args=[user_email])
 
 def send_reminder_emails(user_email):
+    logging.info(f"[APPROVAL] Checking if reminder emails needed for user_email={user_email}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == user_email).first()
     if not user or (user.systemowner and user.accountadmin and user.isso and user.sponsorid):
+        logging.debug(f"[APPROVAL] No reminder emails needed for user_email={user_email} (already fully approved or not found)")
         return
 
     stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
@@ -362,6 +394,7 @@ def send_reminder_emails(user_email):
         if not getattr(user, f"approved{idx}"):
             approval_link = f"{BASE_URL}/{user_email}/{idx}"
             message = f"Reminder: Please approve the new user agreement from {user_email}. Click to approve: or ignore if you've already responded {approval_link}"
+            logging.info(f"[EMAIL] Sending reminder email: stakeholder={stakeholder}, approver_id={idx}, user_email={user_email}")
             send_email(stakeholder, "Reminder: User Agreement Approval Needed", message)
 
 @app.get("/", response_class=HTMLResponse)
@@ -685,17 +718,18 @@ async def submit_agreement(
     requirement2: bool = Form(...),
     requirement3: bool = Form(...)
 ):
-    logging.info(f"Received agreement submission: email={email}, first_name={first_name}, last_name={last_name}, esrl_lab={esrl_lab}, role={role}, requirement1={requirement1}, requirement2={requirement2}, requirement3={requirement3}")
+    logging.info(f"[APPROVAL] Received agreement submission: user_email={email}, first_name={first_name}, last_name={last_name}, lab={esrl_lab}, role={role}, sponsor={sponsor}")
+    logging.debug(f"[APPROVAL] Requirements agreed: requirement1={requirement1}, requirement2={requirement2}, requirement3={requirement3}")
 
     if not (requirement1 and requirement2 and requirement3):
-        logging.error("All requirements must be agreed to for GSL GitHub access")
+        logging.error(f"[APPROVAL] Requirements not met for user_email={email}")
         raise HTTPException(status_code=400, detail="All requirements must be agreed to for GSL GitHub access.")
 
     session = SessionLocal()
     try:
         user_agreement = session.query(UserAgreement).filter(UserAgreement.email == email).first()
         if user_agreement:
-            logging.error("Agreement already submitted for this email")
+            logging.error(f"[APPROVAL] Duplicate submission attempt for user_email={email}")
             raise HTTPException(status_code=400, detail="Agreement already submitted for this email. You should be hearing back shortly.")
 
         # Create the user agreement in the database
@@ -711,89 +745,110 @@ async def submit_agreement(
         )
         session.add(user_agreement)
         session.commit()
+        logging.info(f"[APPROVAL] Agreement created in database: user_email={email}, lab={esrl_lab}, role={role}, sponsor={sponsor}")
 
         # Attempt to send approval emails
         try:
+            logging.info(f"[APPROVAL] Initiating approval email process for user_email={email}")
             send_approval_emails(email)
         except HTTPException as e:
-            logging.error(f"Failed to send approval emails: {e.detail}")
+            logging.error(f"[APPROVAL] Failed to send approval emails for user_email={email}: {e.detail}")
             session.rollback()
             raise e
         except Exception as e:
-            logging.error(f"Error sending approval emails: {e}")
+            logging.error(f"[APPROVAL] Error sending approval emails for user_email={email}: {str(e)}")
             session.rollback()
             raise HTTPException(status_code=500, detail="Failed to send approval emails")
 
-        logging.info("Agreement submitted successfully")
+        logging.info(f"[APPROVAL] Agreement submitted successfully for user_email={email}")
         return {"message": "Agreement submitted. Awaiting approval."}
     except HTTPException as e:
-        logging.error(f"HTTPException: {e.detail}")
+        logging.error(f"[APPROVAL] HTTPException in submit_agreement for user_email={email}: {e.detail}")
         raise e
     except Exception as e:
-        logging.error(f"Error submitting agreement: {e}")
+        logging.error(f"[APPROVAL] Error submitting agreement for user_email={email}: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
     finally:
         session.close()
 
 @app.get("/approve_user/{email}/{approver_id}")
 async def approve_user(email: str, approver_id: int, token: str):
+    logging.info(f"[APPROVAL] Approval endpoint called: user_email={email}, approver_id={approver_id}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
     if not user:
+        logging.error(f"[APPROVAL] User not found for approval: user_email={email}")
         raise HTTPException(status_code=404, detail="User not found")
     
     stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
+    logging.debug(f"[APPROVAL] Stakeholders for user_email={email}: {stakeholders}")
     
     # Check if the user has already been approved by all approvers
     if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
+        logging.warning(f"[APPROVAL] User already fully approved: user_email={email}")
         raise HTTPException(status_code=400, detail="User has already been approved by all stakeholders.")
 
     if approver_id == 1 and user.approval_token1 != token:
+        logging.error(f"[APPROVAL] Invalid token for user_email={email}, approver_id={approver_id}")
         raise HTTPException(status_code=403, detail="Invalid token")
     elif approver_id == 2 and user.approval_token2 != token:
+        logging.error(f"[APPROVAL] Invalid token for user_email={email}, approver_id={approver_id}")
         raise HTTPException(status_code=403, detail="Invalid token")
     elif approver_id == 3 and user.approval_token3 != token:
+        logging.error(f"[APPROVAL] Invalid token for user_email={email}, approver_id={approver_id}")
         raise HTTPException(status_code=403, detail="Invalid token")
     elif approver_id == 4 and user.approval_token4 != token:
+        logging.error(f"[APPROVAL] Invalid token for user_email={email}, approver_id={approver_id}")
         raise HTTPException(status_code=403, detail="Invalid token")
+    
+    logging.info(f"[APPROVAL] Token validated successfully for user_email={email}, approver_id={approver_id}")
 
     if approver_id == 1:
         user.sponsorid = stakeholders[3] 
         user.approval_timestamp1 = datetime.utcnow()
         user.approver_email1 = stakeholders[3]
+        logging.info(f"[APPROVAL] Sponsor approved: user_email={email}, sponsor={stakeholders[3]}, timestamp={user.approval_timestamp1.isoformat()}")
         session.commit()
         # Send approval emails to other stakeholders after sponsor approves
+        logging.info(f"[APPROVAL] Triggering stakeholder notifications for user_email={email}")
         send_stakeholder_approval_emails(email)
     elif approver_id == 2:
         user.systemowner = stakeholders[0] 
         user.approval_timestamp2 = datetime.utcnow()
         user.approver_email2 = stakeholders[0]
+        logging.info(f"[APPROVAL] System Owner approved: user_email={email}, approver={stakeholders[0]}, timestamp={user.approval_timestamp2.isoformat()}")
     elif approver_id == 3:
         user.accountadmin = stakeholders[1] 
         user.approval_timestamp3 = datetime.utcnow()
         user.approver_email3 = stakeholders[1]
+        logging.info(f"[APPROVAL] Account Admin approved: user_email={email}, approver={stakeholders[1]}, timestamp={user.approval_timestamp3.isoformat()}")
     elif approver_id == 4:
         user.isso = stakeholders[2] 
         user.approval_timestamp4 = datetime.utcnow()
         user.approver_email4 = stakeholders[2]
+        logging.info(f"[APPROVAL] ISSO approved: user_email={email}, approver={stakeholders[2]}, timestamp={user.approval_timestamp4.isoformat()}")
 
     session.commit()
 
     if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
         user.final_approval_timestamp = datetime.utcnow()
         session.commit()
+        logging.info(f"[APPROVAL] All approvals complete for user_email={email}, triggering final confirmation, final_timestamp={user.final_approval_timestamp.isoformat()}")
         send_final_confirmation_email(user.email, user.sponsor, user.esrl_lab)
 
     return {"message": "Your approval has been received and the request will now continue through the approval process. Once the candidate is either approved or denied, you'll receive an update via email with access status confirmation."}
 
 @app.get("/refuse_user/{email}/{approver_id}")
 async def refuse_user(email: str, approver_id: int, token: str):
+    logging.info(f"[APPROVAL] REFUSAL endpoint called: user_email={email}, approver_id={approver_id}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
     if not user:
+        logging.error(f"[APPROVAL] User not found for refusal: user_email={email}")
         raise HTTPException(status_code=404, detail="User not found")
     
     stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
+    logging.debug(f"[APPROVAL] Stakeholders for refusal of user_email={email}: {stakeholders}")
 
     # Check if the user has already been approved by all approvers
     if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
@@ -812,22 +867,28 @@ async def refuse_user(email: str, approver_id: int, token: str):
         user.dissystemowner = stakeholders[0] 
         user.approval_timestamp1 = datetime.utcnow()
         user.disapprover_email1 = stakeholders[0]
+        logging.info(f"[APPROVAL] Sponsor refused: user_email={email}, disapprover={stakeholders[0]}, timestamp={user.approval_timestamp1.isoformat()}")
     elif approver_id == 2:
         user.disaccountadmin = stakeholders[1] 
         user.approval_timestamp2 = datetime.utcnow()
         user.disapprover_email2= stakeholders[1]
+        logging.info(f"[APPROVAL] System Owner refused: user_email={email}, disapprover={stakeholders[1]}, timestamp={user.approval_timestamp2.isoformat()}")
     elif approver_id == 3:
         user.disisso = stakeholders[2] 
         user.approval_timestamp3 = datetime.utcnow()
         user.disapprover_email3 = stakeholders[2]
+        logging.info(f"[APPROVAL] Account Admin refused: user_email={email}, disapprover={stakeholders[2]}, timestamp={user.approval_timestamp3.isoformat()}")
     elif approver_id == 4:
         user.dissponsor = stakeholders[3] 
         user.approval_timestamp3 = datetime.utcnow()
         user.disapprover_email4 = stakeholders[3]
+        logging.info(f"[APPROVAL] ISSO refused: user_email={email}, disapprover={stakeholders[3]}, timestamp={user.approval_timestamp3.isoformat()}")
 
     session.commit()
 
+    logging.info(f"[EMAIL] Sending disapproval notification to user_email={email}")
     send_email(user.email, "GitHub Access Request Disapproved", "Your request to join GitHub has been denied.  Email help@gsl.noaa.gov if you have any questions.")
+    logging.info(f"[APPROVAL] User disapproved and notified: user_email={email}, approver_id={approver_id}")
     return {"message": "User disapproved"}
 
 @app.get("/download-agreements/")
@@ -862,14 +923,18 @@ async def get_lab_sponsors():
 # Add a new endpoint for users to renew their agreement
 @app.get("/renew/{email}")
 async def renew_agreement(email: str):
+    logging.info(f"[RENEWAL] Renewal endpoint called: user_email={email}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
     if not user:
+        logging.error(f"[RENEWAL] User not found for renewal: user_email={email}")
         raise HTTPException(status_code=404, detail="User not found")
 
-    user.last_renewal_date = datetime.utcnow()
+    renewal_timestamp = datetime.utcnow()
+    user.last_renewal_date = renewal_timestamp
     session.commit()
     session.close()
+    logging.info(f"[RENEWAL] Agreement renewed successfully: user_email={email}, renewal_timestamp={renewal_timestamp.isoformat()}")
 
     return {"message": "Agreement renewed successfully"}
 
@@ -909,7 +974,9 @@ def authenticate_user(credentials: HTTPBasicCredentials):
         )  
 
 def send_final_confirmation_email(user_email, sponsor, lab):
+    logging.info(f"[APPROVAL] Sending final confirmation emails: user_email={user_email}, sponsor={sponsor}, lab={lab}")
     stakeholders = get_stakeholders(lab, sponsor)
+    logging.debug(f"[STAKEHOLDER] Stakeholders receiving final confirmation for user_email={user_email}: {stakeholders}")
     
     # Send access granted email with link to policy document
     granted_message = (
@@ -918,10 +985,14 @@ def send_final_confirmation_email(user_email, sponsor, lab):
         "https://docs.google.com/document/d/1JuoRV9g2jOnbaGsy2EXJQ_8sPcSpYNEzqUqkvgghtp8/edit?tab=t.0\n\n"
         "If you have any questions, contact your sponsor or the GSL ITS Team."
     )
+    logging.info(f"[EMAIL] Sending access granted email to user_email={user_email}")
     send_email(user_email, "GitHub Access Granted", granted_message)
     
     for stakeholder in stakeholders:
+        logging.info(f"[EMAIL] Sending approval confirmation to stakeholder={stakeholder} for user_email={user_email}")
         send_email(stakeholder, "User Approved", f"{user_email} has been granted an account on GitHub.")
+    
+    logging.info(f"[APPROVAL] Final confirmation process completed for user_email={user_email}")
 
 #check_for_renewals()  # Initial check for renewals on launch of the server
 scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every three days
