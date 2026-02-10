@@ -926,3 +926,5 @@ def send_final_confirmation_email(user_email, sponsor, lab):
 #check_for_renewals()  # Initial check for renewals on launch of the server
 scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every three days
 
+
+#testing workflow for sending emails to stakeholders when a user is approved by their sponsor
