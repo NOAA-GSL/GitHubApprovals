@@ -11,6 +11,34 @@ dependabotalerts9.py
 notifications
 public.crt
 
+
 # Coverage files
 .coverage
 coverage.xml
+
+# Testing artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+>>>>>>> 25b82340f41aec0760c74bdc0f642c93744f7754

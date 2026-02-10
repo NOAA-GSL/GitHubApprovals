@@ -1,0 +1,216 @@
+# Docker Build and Push Workflow
+# Builds the GitHub Approvals container and pushes to GitHub Container Registry
+#
+# Triggers:
+#   - Push to master branch
+#   - Pull requests to master branch
+#   - Manual trigger
+
+name: Docker Build and Push
+
+on:
+  push:
+    branches:
+      - master
+      - gitauthrunnertest
+    paths-ignore:
+      - '**.md'
+      - 'README.md'
+      - 'SECURITY.md'
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: noaa-gsl/githubapprovals/approvals-container-ghcr-test
+
+jobs:
+  create-pull-request:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/gitauthrunnertest' && github.event_name == 'push'
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Create or Update Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GH_API_TOKEN }}
+        run: |
+          # Check if there are differences between branches
+          git fetch origin master
+          DIFF_COUNT=$(git rev-list --count origin/master..HEAD)
+          
+          if [ "$DIFF_COUNT" -eq 0 ]; then
+            echo "⚠️ No differences between gitauthrunnertest and master - skipping PR creation"
+            echo "Push some changes to gitauthrunnertest first, then the PR will be created automatically"
+            exit 0
+          fi
+          
+          echo "Found $DIFF_COUNT commit(s) to merge"
+          
+          # Check if PR already exists
+          PR_NUMBER=$(gh pr list --head gitauthrunnertest --base master --json number --jq '.[0].number')
+          
+          if [ -z "$PR_NUMBER" ]; then
+            echo "Creating new pull request..."
+            gh pr create \
+              --base master \
+              --head gitauthrunnertest \
+              --title "Auto PR: Updates from gitauthrunnertest" \
+              --body "## Automated Pull Request
+
+          This PR was automatically created from the \`gitauthrunnertest\` branch.
+
+          **Branch:** \`gitauthrunnertest\`
+          **Commit:** ${{ github.sha }}
+          **Triggered by:** @${{ github.actor }}
+
+          ### Changes
+          Please review the changes and ensure all tests pass before merging."
+            echo "✅ Pull request created successfully"
+          else
+            echo "Pull request #$PR_NUMBER already exists - it will be automatically updated by the push"
+            echo "✅ Existing PR will be updated with latest changes"
+          fi
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image with test dependencies
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: github-approvals:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run tests inside container
+        run: |
+          echo "Running tests inside Docker container..."
+          docker run --rm \
+            -e ENVIRONMENT=test \
+            -e BASE_URL=http://testserver \
+            -e GITHUB_TOKEN=dummy_test_token_for_testing \
+            -e EMAIL_ADDRESS=test@example.com \
+            -e EMAIL_PASSWORD=dummy_test_password \
+            -e STAKEHOLDERS_PSD=test1@noaa.gov,test2@noaa.gov \
+            -e STAKEHOLDERS_GSD=test1@noaa.gov,test2@noaa.gov \
+            -e STAKEHOLDERS_ESRL=test1@noaa.gov,test2@noaa.gov \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            github-approvals:ci \
+            pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing --cov-report=html
+
+      - name: Extract coverage reports from container
+        run: |
+          echo "Coverage reports generated inside container"
+          ls -la coverage.xml htmlcov/ || echo "Coverage files not found"
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+        continue-on-error: true
+
+      - name: Upload coverage HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+        continue-on-error: true
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Test container startup
+        run: |
+          echo "Testing container startup..."
+          docker run -d --name test-container \
+            -e ENVIRONMENT=test \
+            -e GITHUB_TOKEN=dummy_test_token_for_testing \
+            -e EMAIL_ADDRESS=test@example.com \
+            -e EMAIL_PASSWORD=dummy_test_password \
+            -e STAKEHOLDERS_PSD=test1@noaa.gov,test2@noaa.gov \
+            -e STAKEHOLDERS_GSD=test1@noaa.gov,test2@noaa.gov \
+            -e STAKEHOLDERS_ESRL=test1@noaa.gov,test2@noaa.gov \
+            github-approvals:ci
+          sleep 15
+          echo "Checking container logs..."
+          docker logs test-container
+          echo "Checking if container is running..."
+          if docker ps | grep -q test-container; then
+            echo "✅ Container is running successfully"
+          else
+            echo "❌ Container failed to start"
+            docker logs test-container
+            exit 1
+          fi
+          docker stop test-container
+          docker rm test-container
+
+      - name: Push to GitHub Container Registry
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/gitauthrunnertest')
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate build summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Pushed** | ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tags** | ${{ steps.meta.outputs.tags }} |" >> $GITHUB_STEP_SUMMARY

@@ -12,20 +12,16 @@ RUN apt-get update && \
     apt-get install -y supervisor && \
     apt-get clean
 
-# Install the Python dependencies directly
-RUN pip3 install fastapi==0.88.0 \
-                 uvicorn==0.18.3 \
-                 jinja2==3.1.5 \
-                 sqlalchemy==1.4.41 \
-                 apscheduler==3.9.1 \
-                 python-dotenv==0.21.0 \
-                 numpy==1.22 \
-                 pandas==1.3.5 \
-                 pydantic>=1.10.13 \
-                 python-multipart==0.0.5 \
-                 requests \
-                 pillow \
-                 schedule
+# Copy requirements files first (for better caching)
+COPY requirements.txt /tmp/requirements.txt
+COPY requirements-dev.txt /tmp/requirements-dev.txt
+
+# Install the Python dependencies from requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+
+# Install development/testing dependencies (useful for CI/CD)
+# These will be available in the container for running tests
+RUN pip3 install --no-cache-dir -r /tmp/requirements-dev.txt
 
 # Copy the approvals.py file into the root directory of the container
 COPY approvals.py /approvals.py
