@@ -347,7 +347,7 @@ def send_stakeholder_approval_emails(user_email):
     logging.debug(f"[STAKEHOLDER] License info: active_licenses={rowsindatabase}, available_licenses={available_licenses}")
 
     stakeholder_roles = ["System Owner", "Account Admin", "ISSO"]
-    for idx, (stakeholder, token, role) in enumerate(zip(stakeholders[1:], tokens, stakeholder_roles), start=2):
+    for idx, (stakeholder, token, role) in enumerate(zip(stakeholders[0:3], tokens, stakeholder_roles), start=2):
         approval_link = f"{BASE_URL}/approve_user/{user_email}/{idx}?token={token}"
         refusal_link = f"{BASE_URL}/refuse_user/{user_email}/{idx}?token={token}"
         logging.info(f"[EMAIL] Preparing stakeholder approval email: approver_id={idx}, role={role}, stakeholder={stakeholder}, user_email={user_email}")

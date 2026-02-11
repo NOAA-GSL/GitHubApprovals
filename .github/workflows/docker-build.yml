@@ -12,6 +12,7 @@ on:
   push:
     branches:
       - master
+      - development
       - gitauthrunnertest
     paths-ignore:
       - '**.md'
@@ -20,13 +21,14 @@ on:
   pull_request:
     branches:
       - master
+      - development
     paths-ignore:
       - '**.md'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: noaa-gsl/githubapprovals/approvals-container-ghcr
+  IMAGE_NAME: noaa-gsl/githubapprovals/approvals-container-ghcr-test
 
 jobs:
   create-pull-request:
@@ -192,7 +194,7 @@ jobs:
           docker rm test-container
 
       - name: Push to GitHub Container Registry
-        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/gitauthrunnertest')
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/development' || github.ref == 'refs/heads/gitauthrunnertest')
         uses: docker/build-push-action@v5
         with:
           context: .
