@@ -132,6 +132,10 @@ The application uses APScheduler to schedule reminder emails for pending approva
 ### Logging
 
 The application uses comprehensive structured logging to track all approval workflow activities, making debugging and auditing easier.
+We should see:
+INFO:root:[STAKEHOLDER] Initiating stakeholder approval emails for user_email=...
+INFO:root:[EMAIL] Preparing stakeholder approval email: approver_id=2, role=System Owner, stakeholder=Greg.Pratt@noaa.gov
+INFO:root:[EMAIL] Stakeholder approval email sent: approver_id=2, role=System Owner, stakeholder=Greg.Pratt@noaa.gov
 
 **Log Configuration:**
 - Logs are written to both console (for supervisord/Docker) and file
