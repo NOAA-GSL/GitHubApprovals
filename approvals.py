@@ -864,25 +864,25 @@ async def refuse_user(email: str, approver_id: int, token: str):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     if approver_id == 1:
-        user.dissystemowner = stakeholders[0] 
-        user.approval_timestamp1 = datetime.utcnow()
-        user.disapprover_email1 = stakeholders[0]
-        logging.info(f"[APPROVAL] Sponsor refused: user_email={email}, disapprover={stakeholders[0]}, timestamp={user.approval_timestamp1.isoformat()}")
-    elif approver_id == 2:
-        user.disaccountadmin = stakeholders[1] 
-        user.approval_timestamp2 = datetime.utcnow()
-        user.disapprover_email2= stakeholders[1]
-        logging.info(f"[APPROVAL] System Owner refused: user_email={email}, disapprover={stakeholders[1]}, timestamp={user.approval_timestamp2.isoformat()}")
-    elif approver_id == 3:
-        user.disisso = stakeholders[2] 
-        user.approval_timestamp3 = datetime.utcnow()
-        user.disapprover_email3 = stakeholders[2]
-        logging.info(f"[APPROVAL] Account Admin refused: user_email={email}, disapprover={stakeholders[2]}, timestamp={user.approval_timestamp3.isoformat()}")
-    elif approver_id == 4:
         user.dissponsor = stakeholders[3] 
+        user.approval_timestamp1 = datetime.utcnow()
+        user.disapprover_email1 = stakeholders[3]
+        logging.info(f"[APPROVAL] Sponsor refused: user_email={email}, disapprover={stakeholders[3]}, timestamp={user.approval_timestamp1.isoformat()}")
+    elif approver_id == 2:
+        user.dissystemowner = stakeholders[0] 
+        user.approval_timestamp2 = datetime.utcnow()
+        user.disapprover_email2 = stakeholders[0]
+        logging.info(f"[APPROVAL] System Owner refused: user_email={email}, disapprover={stakeholders[0]}, timestamp={user.approval_timestamp2.isoformat()}")
+    elif approver_id == 3:
+        user.disaccountadmin = stakeholders[1] 
         user.approval_timestamp3 = datetime.utcnow()
-        user.disapprover_email4 = stakeholders[3]
-        logging.info(f"[APPROVAL] ISSO refused: user_email={email}, disapprover={stakeholders[3]}, timestamp={user.approval_timestamp3.isoformat()}")
+        user.disapprover_email3 = stakeholders[1]
+        logging.info(f"[APPROVAL] Account Admin refused: user_email={email}, disapprover={stakeholders[1]}, timestamp={user.approval_timestamp3.isoformat()}")
+    elif approver_id == 4:
+        user.disisso = stakeholders[2] 
+        user.approval_timestamp4 = datetime.utcnow()
+        user.disapprover_email4 = stakeholders[2]
+        logging.info(f"[APPROVAL] ISSO refused: user_email={email}, disapprover={stakeholders[2]}, timestamp={user.approval_timestamp4.isoformat()}")
 
     session.commit()
 
