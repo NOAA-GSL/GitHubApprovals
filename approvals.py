@@ -211,8 +211,14 @@ def check_for_renewals():
     for user in users_to_renew:
         logging.info(f"[RENEWAL] Processing renewal for user_email={user.email}, last_renewal_date={user.last_renewal_date}")
 
-        # Generate the renewal link and message
-        renewal_link = f"{BASE_URL}/renew/{user.email}"
+        # Generate renewal token and store it
+        renewal_token = str(uuid.uuid4())
+        user.approval_token1 = renewal_token
+        session.commit()
+        logging.debug(f"[RENEWAL] Generated renewal token for user_email={user.email}")
+
+        # Generate the renewal link with token and message
+        renewal_link = f"{BASE_URL}/renew/{user.email}?token={renewal_token}"
         logging.debug(f"[RENEWAL] Generated renewal link for user_email={user.email}: {renewal_link}")
         message = f"""
         Dear {user.first_name},
@@ -380,6 +386,41 @@ def send_stakeholder_approval_emails(user_email):
 
     logging.info(f"[STAKEHOLDER] All stakeholder approval emails sent for user_email={user_email}")
     scheduler.add_job(send_reminder_emails, 'interval', hours=48, args=[user_email])
+
+def send_renewal_confirmation_email(user_email):
+    """Send confirmation email after successful renewal."""
+    logging.info(f"[RENEWAL] Sending renewal confirmation email to user_email={user_email}")
+    session = SessionLocal()
+    user = session.query(UserAgreement).filter(UserAgreement.email == user_email).first()
+    
+    if not user:
+        logging.error(f"[RENEWAL] User not found for confirmation email: user_email={user_email}")
+        session.close()
+        return
+    
+    # Calculate next renewal date (one year from now)
+    next_renewal_date = (datetime.utcnow() + timedelta(days=365)).strftime("%B %d, %Y")
+    
+    message = f"""
+Dear {user.first_name},
+
+Thank you for reviewing and agreeing to GSL's GitHub Usage Policy.
+
+Your renewal has been successfully completed! You are good for another year of GitHub access at NOAA GSL.
+
+Your next renewal will be due on or around: {next_renewal_date}
+
+You will receive a reminder email when it's time to renew again.
+
+If you have any questions about the GitHub Usage Policy or your access, please contact your sponsor or the GSL ITS Team.
+
+Thank you,
+Your GSL ITS Team
+    """
+    
+    send_email(user_email, "GitHub Access Renewed Successfully", message)
+    logging.info(f"[EMAIL] Renewal confirmation sent to user_email={user_email}")
+    session.close()
 
 def send_reminder_emails(user_email):
     logging.info(f"[APPROVAL] Checking if reminder emails needed for user_email={user_email}")
@@ -771,8 +812,8 @@ async def submit_agreement(
     finally:
         session.close()
 
-@app.get("/approve_user/{email}/{approver_id}")
-async def approve_user(email: str, approver_id: int, token: str):
+@app.get("/approve_user/{email}/{approver_id}", response_class=HTMLResponse)
+async def approve_user(request: Request, email: str, approver_id: int, token: str):
     logging.info(f"[APPROVAL] Approval endpoint called: user_email={email}, approver_id={approver_id}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
@@ -836,10 +877,25 @@ async def approve_user(email: str, approver_id: int, token: str):
         logging.info(f"[APPROVAL] All approvals complete for user_email={email}, triggering final confirmation, final_timestamp={user.final_approval_timestamp.isoformat()}")
         send_final_confirmation_email(user.email, user.sponsor, user.esrl_lab)
 
-    return {"message": "Your approval has been received and the request will now continue through the approval process. Once the candidate is either approved or denied, you'll receive an update via email with access status confirmation."}
+    session.close()
+    return templates.TemplateResponse("confirmation.html", {
+        "request": request,
+        "page_title": "Approval Received",
+        "heading": "Approval Received!",
+        "message": "Thank you for your response.",
+        "submessage": "Your approval has been received and the request will now continue through the approval process.",
+        "icon_type": "success",
+        "icon": "✓",
+        "show_info_box": True,
+        "info_items": [
+            "✅ Your response has been recorded",
+            "📧 Once the candidate is either approved or denied, you'll receive an update via email"
+        ],
+        "footer_message": "If you have any questions, please contact the GSL ITS Team."
+    })
 
-@app.get("/refuse_user/{email}/{approver_id}")
-async def refuse_user(email: str, approver_id: int, token: str):
+@app.get("/refuse_user/{email}/{approver_id}", response_class=HTMLResponse)
+async def refuse_user(request: Request, email: str, approver_id: int, token: str):
     logging.info(f"[APPROVAL] REFUSAL endpoint called: user_email={email}, approver_id={approver_id}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
@@ -889,7 +945,19 @@ async def refuse_user(email: str, approver_id: int, token: str):
     logging.info(f"[EMAIL] Sending disapproval notification to user_email={email}")
     send_email(user.email, "GitHub Access Request Disapproved", "Your request to join GitHub has been denied.  Email help@gsl.noaa.gov if you have any questions.")
     logging.info(f"[APPROVAL] User disapproved and notified: user_email={email}, approver_id={approver_id}")
-    return {"message": "User disapproved"}
+    
+    session.close()
+    return templates.TemplateResponse("confirmation.html", {
+        "request": request,
+        "page_title": "Response Received",
+        "heading": "Response Received",
+        "message": "Thank you for your response.",
+        "submessage": "The candidate has been notified of the decision.",
+        "icon_type": "info",
+        "icon": "ℹ",
+        "show_info_box": False,
+        "footer_message": "If you have any questions, please contact the GSL ITS Team."
+    })
 
 @app.get("/download-agreements/")
 def download_agreements():
@@ -921,22 +989,56 @@ async def get_lab_sponsors():
     return sponsors_by_lab
 
 # Add a new endpoint for users to renew their agreement
-@app.get("/renew/{email}")
-async def renew_agreement(email: str):
+@app.get("/renew/{email}", response_class=HTMLResponse)
+async def renew_agreement(request: Request, email: str, token: str):
     logging.info(f"[RENEWAL] Renewal endpoint called: user_email={email}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
     if not user:
         logging.error(f"[RENEWAL] User not found for renewal: user_email={email}")
+        session.close()
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Validate the renewal token
+    if user.approval_token1 != token:
+        logging.warning(f"[RENEWAL] Invalid token provided for user_email={email}")
+        session.close()
+        raise HTTPException(status_code=403, detail="Invalid or expired renewal token")
 
     renewal_timestamp = datetime.utcnow()
     user.last_renewal_date = renewal_timestamp
+    # Clear the token after successful renewal
+    user.approval_token1 = None
     session.commit()
-    session.close()
     logging.info(f"[RENEWAL] Agreement renewed successfully: user_email={email}, renewal_timestamp={renewal_timestamp.isoformat()}")
-
-    return {"message": "Agreement renewed successfully"}
+    
+    # Calculate next renewal date for display
+    next_renewal_date = (datetime.utcnow() + timedelta(days=365)).strftime("%B %d, %Y")
+    
+    # Send confirmation email
+    try:
+        send_renewal_confirmation_email(email)
+    except Exception as e:
+        logging.error(f"[RENEWAL] Failed to send confirmation email to user_email={email}: {str(e)}")
+        # Don't fail the renewal if email fails
+    
+    session.close()
+    return templates.TemplateResponse("confirmation.html", {
+        "request": request,
+        "page_title": "Renewal Confirmed",
+        "heading": "Renewal Confirmed!",
+        "message": "Thank you for reviewing GSL's GitHub Usage Policy.",
+        "submessage": "Your response has been received and processed successfully.",
+        "icon_type": "success",
+        "icon": "✓",
+        "show_info_box": True,
+        "email": email,
+        "info_items": [
+            "✅ You're all set for another year of GitHub access!",
+            f"📅 Your next renewal will be due on or around: <strong>{next_renewal_date}</strong>"
+        ],
+        "footer_message": "If you have any questions about the GitHub Usage Policy or your access, please contact your sponsor or the GSL ITS Team."
+    })
 
 from dotenv import dotenv_values
 
