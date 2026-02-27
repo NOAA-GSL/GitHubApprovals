@@ -325,11 +325,11 @@ class TestRenewalWorkflow:
         assert b"renewed successfully" in response.content.lower() or b"all set for another year" in response.content.lower()
 
     def test_renew_nonexistent_user(self, client):
-        """Test renewal for non-existent user."""
+        """Test renewal for non-existent user returns user-friendly HTML page."""
         response = client.get("/renew/notfound@noaa.gov?token=any-token")
         
-        assert response.status_code == 404
-        assert "not found" in response.json()["detail"].lower()
+        assert response.status_code == 200
+        assert b"User Not Found" in response.content or b"not found" in response.content.lower()
 
 
 @pytest.mark.unit
