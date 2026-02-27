@@ -990,20 +990,71 @@ async def get_lab_sponsors():
 
 # Add a new endpoint for users to renew their agreement
 @app.get("/renew/{email}", response_class=HTMLResponse)
-async def renew_agreement(request: Request, email: str, token: str):
-    logging.info(f"[RENEWAL] Renewal endpoint called: user_email={email}")
+async def renew_agreement(request: Request, email: str, token: str = None):
+    logging.info(f"[RENEWAL] Renewal endpoint called: user_email={email}, token_provided={token is not None}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
     if not user:
         logging.error(f"[RENEWAL] User not found for renewal: user_email={email}")
         session.close()
-        raise HTTPException(status_code=404, detail="User not found")
+        return templates.TemplateResponse("confirmation.html", {
+            "request": request,
+            "page_title": "User Not Found",
+            "heading": "User Not Found",
+            "message": "We couldn't find an agreement associated with this email address.",
+            "submessage": "Please contact the GSL ITS Team if you believe this is an error.",
+            "icon_type": "error",
+            "icon": "✗",
+            "show_info_box": False,
+            "email": email,
+            "footer_message": "For assistance, please contact the GSL ITS Team."
+        })
+
+    # Check if token is missing
+    if token is None:
+        logging.warning(f"[RENEWAL] No token provided for user_email={email}")
+        session.close()
+        return templates.TemplateResponse("confirmation.html", {
+            "request": request,
+            "page_title": "Token Required",
+            "heading": "Renewal Link Invalid",
+            "message": "This renewal link is incomplete or has expired.",
+            "submessage": "Please use the renewal link from your most recent reminder email.",
+            "icon_type": "error",
+            "icon": "✗",
+            "show_info_box": True,
+            "email": email,
+            "info_items": [
+                "🔗 Renewal links must include a security token",
+                "📧 Check your email for the complete renewal link",
+                "⏰ Tokens expire after use for security",
+                "❓ Contact the GSL ITS Team if you need a new renewal link"
+            ],
+            "footer_message": "For assistance, please contact the GSL ITS Team."
+        })
 
     # Validate the renewal token
     if user.approval_token1 != token:
         logging.warning(f"[RENEWAL] Invalid token provided for user_email={email}")
         session.close()
-        raise HTTPException(status_code=403, detail="Invalid or expired renewal token")
+        return templates.TemplateResponse("confirmation.html", {
+            "request": request,
+            "page_title": "Invalid Token",
+            "heading": "Renewal Link Invalid",
+            "message": "This renewal link is invalid or has already been used.",
+            "submessage": "Please use the renewal link from your most recent reminder email.",
+            "icon_type": "error",
+            "icon": "✗",
+            "show_info_box": True,
+            "email": email,
+            "info_items": [
+                "🔒 Each renewal link can only be used once",
+                "📧 Check your email for the latest renewal link",
+                "⏰ Old links expire after use for security",
+                "❓ Contact the GSL ITS Team if you need a new renewal link"
+            ],
+            "footer_message": "For assistance, please contact the GSL ITS Team."
+        })
 
     renewal_timestamp = datetime.utcnow()
     user.last_renewal_date = renewal_timestamp
