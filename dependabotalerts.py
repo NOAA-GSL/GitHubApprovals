@@ -114,6 +114,22 @@ def save_email_addresses(csv_file_path, email_map):
     except Exception as e:
         print(f"Error saving CSV file: {str(e)}")    
 
+def get_automation_owners():
+    """Parse AUTOMATION_OWNERS environment variable and return list of email addresses.
+    
+    Supports single email or comma-separated list of emails.
+    Defaults to 'renn.valo@noaa.gov' if not set or empty.
+    
+    Returns:
+        list: List of email addresses (at least one)
+    """
+    owners_str = os.getenv("AUTOMATION_OWNERS", "renn.valo@noaa.gov")
+    owners = [email.strip() for email in owners_str.split(",") if email.strip()]
+    # Ensure at least one owner is returned (fallback to default)
+    if not owners:
+        owners = ["renn.valo@noaa.gov"]
+    return owners
+
 # Send email to a recipient
 def send_email(recipient, subject, message):
     print(f"Preparing to send email to {recipient} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -483,16 +499,20 @@ Best regards,
 GitHub Approvals Automation
 """
     
-    alert_email = "renn.valo@gmail.com"
-    try:
-        send_email(alert_email, subject, message)
-        print(f"[Missing Email Alert] Sent alert to {alert_email} for {admin_username}")
-    except Exception as e:
-        print(f"[Missing Email Alert] Failed to send alert for {admin_username}: {e}")
+    # Send alert to all automation owners
+    for owner_email in get_automation_owners():
+        try:
+            send_email(owner_email, subject, message)
+            print(f"[Missing Email Alert] Sent alert to {owner_email} for {admin_username}")
+        except Exception as e:
+            print(f"[Missing Email Alert] Failed to send alert to {owner_email} for {admin_username}: {e}")
 
 # Send stale admin report
-def send_stale_admin_report(stale_admins, oversight_email="renn.valo@noaa.gov"):
-    """Send report of users in CSV who no longer have admin access."""
+def send_stale_admin_report(stale_admins):
+    """Send report of users in CSV who no longer have admin access.
+    
+    Sends report to all automation owners configured in AUTOMATION_OWNERS environment variable.
+    """
     if not stale_admins:
         print("[Stale Admin Report] No stale admins to report.")
         return
@@ -535,11 +555,13 @@ GitHub Approvals Automation
 NOAA Global Systems Laboratory
 """
     
-    try:
-        send_email(oversight_email, subject, message)
-        print(f"[Stale Admin Report] Sent report to {oversight_email} for {len(stale_admins)} stale admins")
-    except Exception as e:
-        print(f"[Stale Admin Report] Failed to send report: {e}")
+    # Send report to all automation owners
+    for owner_email in get_automation_owners():
+        try:
+            send_email(owner_email, subject, message)
+            print(f"[Stale Admin Report] Sent report to {owner_email} for {len(stale_admins)} stale admins")
+        except Exception as e:
+            print(f"[Stale Admin Report] Failed to send report to {owner_email}: {e}")
 
 # Update CSV file with new admins
 def update_informationowners_csv(new_admins, csv_file_path, email_map):

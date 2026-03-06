@@ -98,11 +98,29 @@ def get_stakeholders(lab, sponsor):
     stakeholders = [email.strip() for email in stakeholders_str.split(",") if email.strip()]
     # Add sponsor and admin email as before
     stakeholders.append(sponsor)
-    stakeholders.append("renn.valo@noaa.gov")
-    logging.info(f"[STAKEHOLDER] Resolved stakeholders for lab={lab}: System Owner={stakeholders[0]}, Account Admin={stakeholders[1]}, ISSO={stakeholders[2]}, Sponsor={stakeholders[3]}, Setup Admin={stakeholders[4]}")
+    # Add all automation owners
+    for owner in get_automation_owners():
+        stakeholders.append(owner)
+    logging.info(f"[STAKEHOLDER] Resolved stakeholders for lab={lab}: System Owner={stakeholders[0]}, Account Admin={stakeholders[1]}, ISSO={stakeholders[2]}, Sponsor={stakeholders[3]}, Automation Owners={stakeholders[4:]}")
     return stakeholders
-    # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
+    # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th+ are the automation owner(s) who will setup the github account.
     # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
+
+def get_automation_owners():
+    """Parse AUTOMATION_OWNERS environment variable and return list of email addresses.
+    
+    Supports single email or comma-separated list of emails.
+    Defaults to 'renn.valo@noaa.gov' if not set or empty.
+    
+    Returns:
+        list: List of email addresses (at least one)
+    """
+    owners_str = os.getenv("AUTOMATION_OWNERS", "renn.valo@noaa.gov")
+    owners = [email.strip() for email in owners_str.split(",") if email.strip()]
+    # Ensure at least one owner is returned (fallback to default)
+    if not owners:
+        owners = ["renn.valo@noaa.gov"]
+    return owners
 
 # Check if we're in development or production mode
 IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development"
