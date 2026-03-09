@@ -639,6 +639,7 @@ def send_summary_to_excluded_users(alerts_by_repo, email_map):
     Recipients include:
       - Users in EXCLUDE_USERS (oversight / non-direct collaborators)
       - Users in EXCLUSIVE_USERS (explicitly opted-in special recipients)
+      - All AUTOMATION_OWNERS (email addresses from environment variable)
 
     Deduplicates usernames case-insensitively.
     """
@@ -660,16 +661,26 @@ def send_summary_to_excluded_users(alerts_by_repo, email_map):
             summary_message += f"  - {alert_type}: {count}\n"
         summary_message += "\n"
 
+    # Send to username-based recipients (EXCLUDE_USERS and EXCLUSIVE_USERS)
     recipients = {u.lower() for u in EXCLUDE_USERS} | {u.lower() for u in EXCLUSIVE_USERS}
     for user in recipients:
         email = get_email_from_map(email_map, user)
         if email:
             try:
                 send_email(email, subject, summary_message)
+                print(f"[Summary] Sent to {user} at {email}")
             except Exception as e:
                 print(f"Failed sending summary to {user}: {e}")
-        else:
-            print(f"No email found for summary recipient: {user}")
+    
+    # Send to all automation owners (direct email addresses)
+    automation_owners = get_automation_owners()
+    print(f"[Summary] Sending to {len(automation_owners)} automation owner(s): {', '.join(automation_owners)}")
+    for owner_email in automation_owners:
+        try:
+            send_email(owner_email, subject, summary_message)
+            print(f"[Summary] Sent to automation owner: {owner_email}")
+        except Exception as e:
+            print(f"Failed sending summary to automation owner {owner_email}: {e}")
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Dependabot alert notifier")
