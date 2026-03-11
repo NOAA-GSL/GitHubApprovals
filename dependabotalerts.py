@@ -72,11 +72,11 @@ EXCLUSIVE_USERS = [
     "ygnoaa",
 ]
 
-# Load email addresses from a CSV file (with optional date_added column)
+# Load email addresses from a CSV file (with optional date_added and welcome_sent columns)
 def load_email_addresses(csv_file_path):
-    """Load email map from CSV. Returns dict: {username: {"email": email, "date_added": date}}.
+    """Load email map from CSV. Returns dict: {username: {"email": email, "date_added": date, "welcome_sent": bool}}.
     
-    Backward compatible with 2-column CSV (username, email only).
+    Backward compatible with older CSV formats (2 or 3 columns).
     """
     email_map = {}
     try:
@@ -86,10 +86,12 @@ def load_email_addresses(csv_file_path):
                 username = row.get("username", "").strip().lower()  # Normalize to lowercase
                 email = row.get("email", "").strip()
                 date_added = row.get("date_added", "").strip()  # Optional field
-                if username and email:
+                welcome_sent = row.get("welcome_sent", "").strip().lower()  # Optional field
+                if username:
                     email_map[username] = {
-                        "email": email,
-                        "date_added": date_added if date_added else ""
+                        "email": email if email else "",
+                        "date_added": date_added if date_added else "",
+                        "welcome_sent": welcome_sent == "yes"
                     }
     except FileNotFoundError:
         print(f"Error: The file {csv_file_path} was not found.")
@@ -109,15 +111,21 @@ def get_email_from_map(email_map, username):
 
 # Save email addresses to a CSV file
 def save_email_addresses(csv_file_path, email_map):
-    """Save email map to CSV with username, email, and date_added columns."""
+    """Save email map to CSV with username, email, date_added, and welcome_sent columns."""
     try:
         with open(csv_file_path, mode='w', encoding='utf-8', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(["username", "email", "date_added"])  # Header
+            writer.writerow(["username", "email", "date_added", "welcome_sent"])  # Header
             for username, data in sorted(email_map.items()):
-                email = data.get("email", "") if isinstance(data, dict) else data
-                date_added = data.get("date_added", "") if isinstance(data, dict) else ""
-                writer.writerow([username, email, date_added])
+                if isinstance(data, dict):
+                    email = data.get("email", "")
+                    date_added = data.get("date_added", "")
+                    welcome_sent = "yes" if data.get("welcome_sent", False) else "no"
+                else:
+                    email = data
+                    date_added = ""
+                    welcome_sent = "no"
+                writer.writerow([username, email, date_added, welcome_sent])
         print(f"Successfully saved email map to {csv_file_path}")
     except Exception as e:
         print(f"Error saving CSV file: {str(e)}")    
@@ -414,7 +422,8 @@ def compare_admins(discovered_admins, email_map):
             "username": username,
             "email": email,
             "repos": repos,
-            "date_added": current_date
+            "date_added": current_date,
+            "welcome_sent": False  # Not sent yet
         }
         
         if email:
@@ -447,7 +456,10 @@ def compare_admins(discovered_admins, email_map):
 
 # Send welcome email to new admin
 def send_new_admin_welcome_email(admin_email, username, repo_list):
-    """Send policy notification email to newly detected admin."""
+    """Send policy notification email to newly detected admin.
+    
+    Returns True if email was sent successfully, False otherwise.
+    """
     repo_text = "\n".join([f"  - {repo}" for repo in repo_list])
     
     subject = "Welcome: You are now an Information Owner for NOAA-GSL Repositories"
@@ -476,8 +488,10 @@ NOAA Global Systems Laboratory
     try:
         send_email(admin_email, subject, message)
         print(f"[New Admin Email] Sent welcome email to {username} at {admin_email}")
+        return True
     except Exception as e:
         print(f"[New Admin Email] Failed to send email to {username}: {e}")
+        return False
 
 # Send alert about missing email
 def send_missing_email_alert(admin_username, repo_list):
@@ -496,12 +510,18 @@ The system attempted to:
 2. Fetch public email from GitHub API - NOT AVAILABLE
 
 Action Required:
-Please manually obtain the email address for this user and update informationowners.csv with:
-  - Username: {admin_username}
-  - Email: [TO BE ADDED]
-  - Date Added: [CURRENT DATE]
+Please manually obtain the email address for this user and update informationowners.csv:
+  1. Open informationowners.csv
+  2. Find the row with username: {admin_username}
+  3. Add their email address in the "email" column
+  4. Save the file
 
-Once the email is added, the user will receive policy notification on the next run.
+On the next automated run, the system will:
+  - Detect the email address has been added
+  - Automatically send the policy notification welcome email to the user
+  - Mark welcome_sent=yes to prevent duplicate emails
+
+No further action needed after adding the email.
 
 Best regards,
 GitHub Approvals Automation
@@ -585,10 +605,12 @@ def update_informationowners_csv(new_admins, csv_file_path, email_map):
         username = admin["username"].lower()
         email = admin.get("email", "")
         date_added = admin.get("date_added", "")
+        welcome_sent = admin.get("welcome_sent", False)
         
         email_map[username] = {
             "email": email,
-            "date_added": date_added
+            "date_added": date_added,
+            "welcome_sent": welcome_sent
         }
         print(f"[CSV Update] Added {username} with email: {email if email else 'MISSING'}")
     
@@ -599,6 +621,35 @@ def update_informationowners_csv(new_admins, csv_file_path, email_map):
     except Exception as e:
         print(f"[CSV Update] Failed to update CSV: {e}")
         raise
+
+# Find admins who need welcome emails (have email but haven't been sent)
+def find_admins_needing_welcome(email_map, discovered_admins):
+    """Find admins in CSV with email but welcome_sent=False.
+    
+    Returns list of admins to send welcome emails to.
+    """
+    admins_needing_welcome = []
+    
+    for username, data in email_map.items():
+        email = data.get("email", "") if isinstance(data, dict) else data
+        welcome_sent = data.get("welcome_sent", False) if isinstance(data, dict) else False
+        
+        # Check if user has email but hasn't received welcome
+        if email and not welcome_sent:
+            # Get current repos from discovered_admins (if they're still an admin)
+            repos = []
+            if username.lower() in discovered_admins:
+                repos = discovered_admins[username.lower()].get("repos", [])
+            
+            if repos:  # Only send if they still have admin access
+                admins_needing_welcome.append({
+                    "username": username,
+                    "email": email,
+                    "repos": repos
+                })
+                print(f"[Welcome Check] {username} needs welcome email (email: {email}, repos: {len(repos)})")
+    
+    return admins_needing_welcome
 
 # ============================================================================
 # End of Admin Detection Functions
@@ -754,11 +805,13 @@ def main(argv=None):
             if new_with_email:
                 print(f"\n[Admin Sync] Processing {len(new_with_email)} new admin(s) with email...")
                 for admin in new_with_email:
-                    send_new_admin_welcome_email(
+                    success = send_new_admin_welcome_email(
                         admin["email"], 
                         admin["username"], 
                         admin["repos"]
                     )
+                    # Mark as sent if successful
+                    admin["welcome_sent"] = success
                 # Update CSV with new admins
                 update_informationowners_csv(new_with_email, csv_file_path, email_map)
             
@@ -775,11 +828,31 @@ def main(argv=None):
                 print(f"\n[Admin Sync] Processing {len(stale_admins)} stale admin(s)...")
                 send_stale_admin_report(stale_admins)
             
+            # Check for existing admins who need welcome emails (email added manually)
+            print(f"\n[Admin Sync] Checking for admins with newly added emails...")
+            admins_needing_welcome = find_admins_needing_welcome(email_map, discovered_admins)
+            if admins_needing_welcome:
+                print(f"[Admin Sync] Sending {len(admins_needing_welcome)} pending welcome email(s)...")
+                for admin in admins_needing_welcome:
+                    success = send_new_admin_welcome_email(
+                        admin["email"],
+                        admin["username"],
+                        admin["repos"]
+                    )
+                    if success:
+                        # Mark as sent in email_map
+                        email_map[admin["username"].lower()]["welcome_sent"] = True
+                # Save updated email_map with welcome_sent flags
+                save_email_addresses(csv_file_path, email_map)
+            else:
+                print("[Admin Sync] No pending welcome emails.")
+            
             # Summary
             print("\n" + "="*80)
             print("Admin Detection Summary:")
             print(f"  - New admins added (with email): {len(new_with_email)}")
             print(f"  - New admins added (missing email): {len(new_missing_email)}")
+            print(f"  - Pending welcome emails sent: {len(admins_needing_welcome)}")
             print(f"  - Stale admins reported: {len(stale_admins)}")
             print("="*80 + "\n")
         else:
