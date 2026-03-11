@@ -34,7 +34,15 @@ Exit codes:
 
 # NOTE: Internal 'schedule' library usage removed for standalone execution.
 
-load_dotenv(dotenv_path="data/.env")
+# Load .env from appropriate location (container vs development)
+if os.path.exists("/data/.env"):
+    load_dotenv(dotenv_path="/data/.env")
+    print("[CONFIG] Loaded environment from /data/.env")
+elif os.path.exists(".env"):
+    load_dotenv(dotenv_path=".env")
+    print("[CONFIG] Loaded environment from .env")
+else:
+    print("[CONFIG] No .env file found, using system environment variables")
 
 def _require_env(name: str) -> str:
     value = os.getenv(name)
