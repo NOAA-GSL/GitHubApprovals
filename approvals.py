@@ -274,6 +274,46 @@ def check_for_renewals():
     session.close()
 
 
+def recover_pending_approval_reminders():
+    """On server startup, find all pending approvals and schedule reminder jobs for them.
+    
+    This ensures that if the server restarts, pending approvals don't get stuck without reminders.
+    """
+    logging.info("[STARTUP] Checking for pending approvals to schedule reminder jobs...")
+    session = SessionLocal()
+    try:
+        # Find all users where:
+        # - Sponsor approved (sponsorid is set)
+        # - Still waiting for at least one stakeholder (systemowner, accountadmin, or isso not set)
+        # - Not denied (no disapproval fields set)
+        pending_users = session.query(UserAgreement).filter(
+            UserAgreement.sponsorid.isnot(None),
+            UserAgreement.sponsorid != "",
+            UserAgreement.sponsorid != "0"
+        ).all()
+        
+        recovered_count = 0
+        for user in pending_users:
+            # Check if fully approved - skip if so
+            if user.systemowner and user.accountadmin and user.isso:
+                continue
+            
+            # Check if denied - skip if so
+            if user.dissponsor or user.dissystemowner or user.disaccountadmin or user.disisso:
+                continue
+            
+            # This user has pending approvals - schedule reminder job
+            logging.info(f"[STARTUP] Recovering reminder job for pending approval: user_email={user.email}")
+            job = scheduler.add_job(send_reminder_emails, 'interval', hours=48, args=[user.email])
+            REMINDER_JOBS[user.email] = job
+            recovered_count += 1
+        
+        logging.info(f"[STARTUP] Recovered {recovered_count} pending approval reminder jobs")
+    except Exception as e:
+        logging.error(f"[STARTUP] Error recovering pending approval reminders: {str(e)}")
+    finally:
+        session.close()
+
 
 def send_email(recipient, subject, message):
     logging.debug(f"[EMAIL] Preparing to send email: recipient={recipient}, subject={subject}, from=github.gsl@noaa.gov")
@@ -1263,5 +1303,7 @@ def send_final_confirmation_email(user_email, sponsor, lab):
 #check_for_renewals()  # Initial check for renewals on launch of the server
 scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every three days
 
+# On startup, recover reminder jobs for any pending approvals
+recover_pending_approval_reminders()
 
 #testing workflow for sending emails to stakeholders when a user is approved by their sponsor
