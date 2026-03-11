@@ -70,8 +70,14 @@ def add_columns_if_missing(conn, dry_run=False):
     
     return True
 
-def load_csv_data(csv_path):
-    """Load Information Owners from CSV file."""
+def load_csv_data(csv_path, mark_welcomed=True):
+    """Load Information Owners from CSV file.
+    
+    Args:
+        csv_path: Path to informationowners.csv
+        mark_welcomed: If True, mark all existing CSV users as already welcomed (default: True)
+                      This prevents duplicate welcome emails to existing Information Owners.
+    """
     info_owners = []
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -80,7 +86,14 @@ def load_csv_data(csv_path):
                 username = row.get('username', '').strip()
                 email = row.get('email', '').strip()
                 date_added = row.get('date_added', '').strip()
-                welcome_sent = row.get('welcome_sent', '').strip().lower() == 'yes'
+                
+                # Check if CSV has welcome_sent column (for backward compatibility)
+                # If not present, use mark_welcomed parameter
+                if 'welcome_sent' in row:
+                    welcome_sent = row.get('welcome_sent', '').strip().lower() == 'yes'
+                else:
+                    # CSV doesn't have welcome_sent column - use default
+                    welcome_sent = mark_welcomed
                 
                 if username:  # Only include rows with username
                     info_owners.append({
@@ -89,7 +102,11 @@ def load_csv_data(csv_path):
                         'date_added': date_added if date_added else None,
                         'welcome_sent': welcome_sent
                     })
+        
+        welcomed_count = sum(1 for owner in info_owners if owner['welcome_sent'])
         print(f"  Loaded {len(info_owners)} Information Owners from CSV")
+        print(f"  - {welcomed_count} marked as 'already welcomed' (won't receive welcome emails)")
+        print(f"  - {len(info_owners) - welcomed_count} marked as 'not welcomed' (will receive welcome emails)")
         return info_owners
     except FileNotFoundError:
         print(f"  ERROR: CSV file not found at {csv_path}")
@@ -184,6 +201,10 @@ def migrate_csv_to_database(conn, info_owners, dry_run=False):
 def main():
     parser = argparse.ArgumentParser(description="Migrate Information Owner data from CSV to database")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without making changes")
+    parser.add_argument("--mark-existing-welcomed", action="store_true", default=True, 
+                       help="Mark all existing CSV users as already welcomed (prevents duplicate emails). Default: True")
+    parser.add_argument("--no-mark-existing-welcomed", dest="mark_existing_welcomed", action="store_false", 
+                       help="Do NOT mark existing CSV users as welcomed (will send welcome emails after migration)")
     args = parser.parse_args()
     
     print("="*80)
@@ -209,6 +230,15 @@ def main():
     if args.dry_run:
         print("\n🔍 DRY RUN MODE - No changes will be made\n")
     
+    # Display welcome email policy
+    if args.mark_existing_welcomed:
+        print("✉️  WELCOME EMAIL POLICY: Existing CSV users will be marked as 'already welcomed'")
+        print("   This prevents sending duplicate welcome emails to your existing Information Owners.")
+    else:
+        print("⚠️  WARNING: Existing CSV users will be marked as 'not welcomed'")
+        print("   Welcome emails WILL be sent to all users with email addresses after migration!")
+    print()
+    
     # Connect to database
     print(f"\n🔌 Connecting to database...")
     conn = sqlite3.connect(db_path)
@@ -220,7 +250,7 @@ def main():
         
         # Step 2: Load CSV
         print(f"\n📋 Step 2: Loading CSV data...")
-        info_owners = load_csv_data(csv_path)
+        info_owners = load_csv_data(csv_path, mark_welcomed=args.mark_existing_welcomed)
         
         if not info_owners:
             print("  No data to migrate!")
