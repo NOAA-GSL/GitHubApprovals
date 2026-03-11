@@ -62,6 +62,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import logging
 from pydantic import BaseModel
+from typing import Optional
 import pandas as pd
 import threading
 import time
@@ -178,6 +179,10 @@ class UserAgreement(Base):
     email = Column(String, unique=True, index=True)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
+    github_username = Column(String, nullable=True, index=True)
+    information_owner = Column(Boolean, default=False, index=True)
+    welcome_email_sent = Column(Boolean, default=False)
+    info_owner_date_added = Column(DateTime, nullable=True)
     esrl_lab = Column(String, nullable=False)
     role = Column(String, nullable=False)
     agreed = Column(Boolean, default=False)
@@ -565,6 +570,9 @@ class UpdateAgreementRequest(BaseModel):
     role: str
     agreed: bool
     last_renewal_date: datetime  # New field for last renewal date
+    github_username: Optional[str] = None
+    information_owner: Optional[bool] = False
+    welcome_email_sent: Optional[bool] = False
 
 @app.put("/api/agreements/{email}")
 async def update_agreement(
@@ -589,6 +597,9 @@ async def update_agreement(
     user_agreement.role = request.role
     user_agreement.agreed = request.agreed
     user_agreement.last_renewal_date = request.last_renewal_date
+    user_agreement.github_username = request.github_username
+    user_agreement.information_owner = request.information_owner
+    user_agreement.welcome_email_sent = request.welcome_email_sent
     session.commit()
     return {"message": "Agreement updated successfully"}
 

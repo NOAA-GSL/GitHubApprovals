@@ -1,6 +1,6 @@
 #author: Renn Valo
 #date: 08/1/2025
-#Version: 5.0
+#Version: 6.0 - Migrated from CSV to database for Information Owner tracking
 
 import requests
 import argparse
@@ -10,8 +10,10 @@ import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import time
-import csv  # Import CSV module
+from datetime import datetime
 from dotenv import load_dotenv
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy.orm import declarative_base, sessionmaker
 """Standalone Dependabot alert notifier.
 
 This version removes the internal scheduler so that an external scheduler (cron, task
@@ -44,6 +46,34 @@ elif os.path.exists(".env"):
 else:
     print("[CONFIG] No .env file found, using system environment variables")
 
+# Database setup - shared with approvals.py
+if os.path.exists("/data"):
+    DATABASE_URL = "sqlite:////data/agreement.db"  # Production
+    print("[CONFIG] Using production database: /data/agreement.db")
+else:
+    DATABASE_URL = "sqlite:///./agreement.db"  # Development
+    print("[CONFIG] Using development database: ./agreement.db")
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Lightweight UserAgreement model (only fields we need)
+class UserAgreement(Base):
+    __tablename__ = "user_agreements"
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, index=True)
+    first_name = Column(String)
+    last_name = Column(String)
+    github_username = Column(String, index=True)
+    information_owner = Column(Boolean, default=False, index=True)
+    welcome_email_sent = Column(Boolean, default=False)
+    info_owner_date_added = Column(DateTime)
+    esrl_lab = Column(String)
+    role = Column(String)
+    agreed = Column(Boolean)
+    sponsor = Column(String)
+
 def _require_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
@@ -72,32 +102,37 @@ EXCLUSIVE_USERS = [
     "ygnoaa",
 ]
 
-# Load email addresses from a CSV file (with optional date_added and welcome_sent columns)
-def load_email_addresses(csv_file_path):
-    """Load email map from CSV. Returns dict: {username: {"email": email, "date_added": date, "welcome_sent": bool}}.
+# Load email addresses from database (Information Owners)
+def load_email_addresses():
+    """Load Information Owners from database. Returns dict: {username: {"email": email, "date_added": date, "welcome_sent": bool}}.
     
-    Backward compatible with older CSV formats (2 or 3 columns).
+    Queries user_agreements table for users with information_owner=True.
     """
     email_map = {}
+    session = SessionLocal()
     try:
-        with open(csv_file_path, mode='r', encoding='utf-8') as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                username = row.get("username", "").strip().lower()  # Normalize to lowercase
-                email = row.get("email", "").strip()
-                date_added = row.get("date_added", "").strip()  # Optional field
-                welcome_sent = row.get("welcome_sent", "").strip().lower()  # Optional field
-                if username:
-                    email_map[username] = {
-                        "email": email if email else "",
-                        "date_added": date_added if date_added else "",
-                        "welcome_sent": welcome_sent == "yes"
-                    }
-    except FileNotFoundError:
-        print(f"Error: The file {csv_file_path} was not found.")
+        # Query all Information Owners
+        info_owners = session.query(UserAgreement).filter(
+            UserAgreement.information_owner == True
+        ).all()
+        
+        for owner in info_owners:
+            if owner.github_username:  # Only include if they have a github_username
+                username = owner.github_username.lower()  # Normalize to lowercase
+                email_map[username] = {
+                    "email": owner.email if owner.email else "",
+                    "date_added": owner.info_owner_date_added.strftime("%Y-%m-%d") if owner.info_owner_date_added else "",
+                    "welcome_sent": owner.welcome_email_sent if owner.welcome_email_sent else False
+                }
+        
+        print(f"[DATABASE] Loaded {len(email_map)} Information Owners from database")
+        return email_map
+    
     except Exception as e:
-        print(f"Error reading the CSV file: {str(e)}")
-    return email_map
+        print(f"[DATABASE] Error loading Information Owners: {str(e)}")
+        return {}
+    finally:
+        session.close()
 
 # Helper function to extract email from email_map
 def get_email_from_map(email_map, username):
@@ -109,26 +144,41 @@ def get_email_from_map(email_map, username):
         return data.get("email")
     return data  # Old format: direct string
 
-# Save email addresses to a CSV file
-def save_email_addresses(csv_file_path, email_map):
-    """Save email map to CSV with username, email, date_added, and welcome_sent columns."""
+# Save/update email addresses in database
+def save_email_addresses(email_map):
+    """Update Information Owner records in database.
+    
+    Updates existing records with new email/welcome_sent status.
+    """
+    session = SessionLocal()
     try:
-        with open(csv_file_path, mode='w', encoding='utf-8', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(["username", "email", "date_added", "welcome_sent"])  # Header
-            for username, data in sorted(email_map.items()):
-                if isinstance(data, dict):
-                    email = data.get("email", "")
-                    date_added = data.get("date_added", "")
-                    welcome_sent = "yes" if data.get("welcome_sent", False) else "no"
-                else:
-                    email = data
-                    date_added = ""
-                    welcome_sent = "no"
-                writer.writerow([username, email, date_added, welcome_sent])
-        print(f"Successfully saved email map to {csv_file_path}")
+        for username, data in email_map.items():
+            email = data.get("email", "") if isinstance(data, dict) else data
+            welcome_sent = data.get("welcome_sent", False) if isinstance(data, dict) else False
+            date_added_str = data.get("date_added", "") if isinstance(data, dict) else ""
+            
+            # Find user by github_username
+            user = session.query(UserAgreement).filter(
+                UserAgreement.github_username == username
+            ).first()
+            
+            if user:
+                # Update existing record
+                if email:
+                    user.email = email
+                user.welcome_email_sent = welcome_sent
+                print(f"[DATABASE] Updated {username}: email={email}, welcome_sent={welcome_sent}")
+            else:
+                print(f"[DATABASE] Warning: User {username} not found in database")
+        
+        session.commit()
+        print(f"[DATABASE] Successfully updated Information Owner records")
+    
     except Exception as e:
-        print(f"Error saving CSV file: {str(e)}")    
+        print(f"[DATABASE] Error saving to database: {str(e)}")
+        session.rollback()
+    finally:
+        session.close()    
 
 def get_automation_owners():
     """Parse AUTOMATION_OWNERS environment variable and return list of email addresses.
@@ -465,7 +515,7 @@ def send_new_admin_welcome_email(admin_email, username, repo_list):
     subject = "Welcome: You are now an Information Owner for NOAA-GSL Repositories"
     message = f"""Hello {username},
 
-You have been detected as a repository administrator for the following NOAA-GSL GitHub repositories:
+You have been detected as an Information Owner for the following NOAA-GSL GitHub repositories:
 
 {repo_text}
 
@@ -596,65 +646,121 @@ NOAA Global Systems Laboratory
         except Exception as e:
             print(f"[Stale Admin Report] Failed to send report to {owner_email}: {e}")
 
-# Update CSV file with new admins
-def update_informationowners_csv(new_admins, csv_file_path, email_map):
-    """Append new admins to CSV file while preserving existing entries."""
+# Update database with new Information Owners
+def update_informationowners_csv(new_admins, email_map):
+    """Add or update Information Owner records in database."""
     if not new_admins:
-        print("[CSV Update] No new admins to add.")
+        print("[DATABASE] No new admins to add.")
         return
     
-    print(f"[CSV Update] Adding {len(new_admins)} new admin(s) to {csv_file_path}")
+    print(f"[DATABASE] Adding/updating {len(new_admins)} Information Owner(s)...")
+    session = SessionLocal()
     
-    # Update email_map with new entries
-    for admin in new_admins:
-        username = admin["username"].lower()
-        email = admin.get("email", "")
-        date_added = admin.get("date_added", "")
-        welcome_sent = admin.get("welcome_sent", False)
-        
-        email_map[username] = {
-            "email": email,
-            "date_added": date_added,
-            "welcome_sent": welcome_sent
-        }
-        print(f"[CSV Update] Added {username} with email: {email if email else 'MISSING'}")
-    
-    # Save updated map back to CSV
     try:
-        save_email_addresses(csv_file_path, email_map)
-        print(f"[CSV Update] Successfully updated {csv_file_path}")
+        for admin in new_admins:
+            username = admin["username"].lower()
+            email = admin.get("email", "")
+            date_added = admin.get("date_added", "")
+            welcome_sent = admin.get("welcome_sent", False)
+            
+            # Try to find existing user by email or github_username
+            user = None
+            if email:
+                user = session.query(UserAgreement).filter(
+                    UserAgreement.email == email
+                ).first()
+            
+            if not user and username:
+                user = session.query(UserAgreement).filter(
+                    UserAgreement.github_username == username
+                ).first()
+            
+            if user:
+                # Update existing record
+                user.github_username = username
+                user.information_owner = True
+                user.welcome_email_sent = welcome_sent
+                if date_added:
+                    user.info_owner_date_added = datetime.strptime(date_added, "%Y-%m-%d")
+                print(f"[DATABASE] Updated {username} (email: {email if email else 'MISSING'})")
+            else:
+                # Create new minimal record
+                new_user = UserAgreement(
+                    email=email if email else f"{username}@temp.local",  # Placeholder if no email
+                    first_name="",
+                    last_name="",
+                    github_username=username,
+                    esrl_lab="Unknown",
+                    role="Information Owner",
+                    agreed=False,
+                    sponsor="N/A",
+                    information_owner=True,
+                    welcome_email_sent=welcome_sent,
+                    info_owner_date_added=datetime.strptime(date_added, "%Y-%m-%d") if date_added else datetime.now()
+                )
+                session.add(new_user)
+                print(f"[DATABASE] Created {username} (email: {email if email else 'MISSING'})")
+            
+            # Update email_map for consistency
+            email_map[username] = {
+                "email": email,
+                "date_added": date_added,
+                "welcome_sent": welcome_sent
+            }
+        
+        session.commit()
+        print(f"[DATABASE] Successfully updated database")
+    
     except Exception as e:
-        print(f"[CSV Update] Failed to update CSV: {e}")
+        print(f"[DATABASE] Failed to update: {e}")
+        session.rollback()
         raise
+    finally:
+        session.close()
 
 # Find admins who need welcome emails (have email but haven't been sent)
 def find_admins_needing_welcome(email_map, discovered_admins):
-    """Find admins in CSV with email but welcome_sent=False.
+    """Find Information Owners with email but welcome_email_sent=False.
     
-    Returns list of admins to send welcome emails to.
+    Queries database for users needing welcome emails.
     """
+    session = SessionLocal()
     admins_needing_welcome = []
     
-    for username, data in email_map.items():
-        email = data.get("email", "") if isinstance(data, dict) else data
-        welcome_sent = data.get("welcome_sent", False) if isinstance(data, dict) else False
+    try:
+        # Query database for Information Owners with email but no welcome email sent
+        users = session.query(UserAgreement).filter(
+            UserAgreement.information_owner == True,
+            UserAgreement.email != None,
+            UserAgreement.email != "",
+            UserAgreement.welcome_email_sent == False
+        ).all()
         
-        # Check if user has email but hasn't received welcome
-        if email and not welcome_sent:
+        for user in users:
+            username = user.github_username.lower() if user.github_username else None
+            if not username:
+                continue
+            
             # Get current repos from discovered_admins (if they're still an admin)
             repos = []
-            if username.lower() in discovered_admins:
-                repos = discovered_admins[username.lower()].get("repos", [])
+            if username in discovered_admins:
+                repos = discovered_admins[username].get("repos", [])
             
             if repos:  # Only send if they still have admin access
                 admins_needing_welcome.append({
                     "username": username,
-                    "email": email,
+                    "email": user.email,
                     "repos": repos
                 })
-                print(f"[Welcome Check] {username} needs welcome email (email: {email}, repos: {len(repos)})")
+                print(f"[Welcome Check] {username} needs welcome email (email: {user.email}, repos: {len(repos)})")
+        
+        return admins_needing_welcome
     
-    return admins_needing_welcome
+    except Exception as e:
+        print(f"[DATABASE] Error finding admins needing welcome: {e}")
+        return []
+    finally:
+        session.close()
 
 # ============================================================================
 # End of Admin Detection Functions
@@ -767,29 +873,13 @@ def main(argv=None):
 
     org = "NOAA-GSL"
     
-    # Determine CSV path with migration logic for existing deployments
-    if os.path.exists("/data"):
-        csv_file_path = "/data/informationowners.csv"
-        # Migration: if file doesn't exist in /data but exists in root, copy it
-        if not os.path.exists(csv_file_path) and os.path.exists("/informationowners.csv"):
-            print(f"[MIGRATION] Copying CSV from root to persistent storage...")
-            try:
-                import shutil
-                shutil.copy2("/informationowners.csv", csv_file_path)
-                print(f"[MIGRATION] Successfully migrated CSV to {csv_file_path}")
-            except Exception as e:
-                print(f"[MIGRATION] Failed to migrate CSV: {e}")
-                print(f"[MIGRATION] Falling back to root location: /informationowners.csv")
-                csv_file_path = "/informationowners.csv"
-        print(f"[CONFIG] Running in container mode - using: {csv_file_path}")
-    else:
-        csv_file_path = "informationowners.csv"
-        print(f"[CONFIG] Running in development mode - using local storage: {csv_file_path}")
-    email_map = load_email_addresses(csv_file_path)
+    # Load Information Owners from database
+    print(f"[CONFIG] Loading Information Owners from database...")
+    email_map = load_email_addresses()
     if not email_map:
         print("WARNING: Email map is empty; collaborator emails will be missing.")
     else:
-        print(f"Loaded email map entries: {len(email_map)}")
+        print(f"Loaded {len(email_map)} Information Owners from database")
 
     # =========================================================================
     # NEW: Admin Detection and Synchronization
@@ -817,16 +907,16 @@ def main(argv=None):
                     )
                     # Mark as sent if successful
                     admin["welcome_sent"] = success
-                # Update CSV with new admins
-                update_informationowners_csv(new_with_email, csv_file_path, email_map)
+                # Update database with new admins
+                update_informationowners_csv(new_with_email, email_map)
             
             # Process new admins without email
             if new_missing_email:
                 print(f"\n[Admin Sync] Processing {len(new_missing_email)} new admin(s) without email...")
                 for admin in new_missing_email:
                     send_missing_email_alert(admin["username"], admin["repos"])
-                # Still add to CSV even without email (manual update needed)
-                update_informationowners_csv(new_missing_email, csv_file_path, email_map)
+                # Still add to database even without email (manual update needed)
+                update_informationowners_csv(new_missing_email, email_map)
             
             # Process stale admins (in CSV but not in GitHub)
             if stale_admins:
@@ -847,8 +937,8 @@ def main(argv=None):
                     if success:
                         # Mark as sent in email_map
                         email_map[admin["username"].lower()]["welcome_sent"] = True
-                # Save updated email_map with welcome_sent flags
-                save_email_addresses(csv_file_path, email_map)
+                # Save updated email_map with welcome_sent flags to database
+                save_email_addresses(email_map)
             else:
                 print("[Admin Sync] No pending welcome emails.")
             

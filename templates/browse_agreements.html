@@ -38,6 +38,9 @@
             <tr>
                 <th style="width: 120px;">First Name</th>
                 <th style="width: 120px;">Last Name</th>
+                <th style="width: 140px;">GitHub Username</th>
+                <th style="width: 100px;">Info Owner</th>
+                <th style="width: 120px;">Welcome Email Sent</th>
                 <th style="width: 220px;">Email</th>
                 <th style="width: 120px;">ESRL Lab</th>
                 <th style="width: 120px;">Role</th>
@@ -56,6 +59,13 @@
                 <tr>
                     <td><input type="text" class="edit-field" id="first_name_{{ agreement.email }}" value="{{ agreement.first_name }}"></td>
                     <td><input type="text" class="edit-field" id="last_name_{{ agreement.email }}" value="{{ agreement.last_name }}"></td>
+                    <td><input type="text" class="edit-field" id="github_username_{{ agreement.email }}" value="{{ agreement.github_username | default('') }}"></td>
+                    <td style="text-align:center;">
+                        <input type="checkbox" class="edit-field" id="information_owner_{{ agreement.email }}" {% if agreement.information_owner %}checked{% endif %}>
+                    </td>
+                    <td style="text-align:center;">
+                        <input type="checkbox" class="edit-field" id="welcome_email_sent_{{ agreement.email }}" {% if agreement.welcome_email_sent %}checked{% endif %}>
+                    </td>
                     <td>{{ agreement.email }}</td>
                     <td><input type="text" class="edit-field" id="esrl_lab_{{ agreement.email }}" value="{{ agreement.esrl_lab }}"></td>
                     <td><input type="text" class="edit-field" id="role_{{ agreement.email }}" value="{{ agreement.role }}"></td>
@@ -100,6 +110,9 @@
     async function saveAgreement(email) {
         const newFirstName = document.getElementById(`first_name_${email}`).value;
         const newLastName = document.getElementById(`last_name_${email}`).value;
+        const newGithubUsername = document.getElementById(`github_username_${email}`).value;
+        const newInformationOwner = document.getElementById(`information_owner_${email}`).checked;
+        const newWelcomeEmailSent = document.getElementById(`welcome_email_sent_${email}`).checked;
         const newEsrlLab = document.getElementById(`esrl_lab_${email}`).value;
         const newRole = document.getElementById(`role_${email}`).value;
         const newAgreed = document.getElementById(`agreed_${email}`).checked;
@@ -113,6 +126,9 @@
             body: JSON.stringify({
                 first_name: newFirstName,
                 last_name: newLastName,
+                github_username: newGithubUsername,
+                information_owner: newInformationOwner,
+                welcome_email_sent: newWelcomeEmailSent,
                 esrl_lab: newEsrlLab,
                 role: newRole,
                 agreed: newAgreed,
