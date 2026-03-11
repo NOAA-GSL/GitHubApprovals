@@ -476,7 +476,12 @@ As a repository administrator (Information Owner), you are required to follow NO
 3. Managing repository access and collaborator permissions appropriately
 4. Following data classification and handling guidelines
 
-You will receive automated notifications about Dependabot security alerts for your repositories. Please review the full policy documentation at your earliest convenience.
+You will receive automated notifications about Dependabot security alerts for your repositories.
+
+Policy Documentation:
+https://docs.google.com/document/d/1myfENqhtMSvlcrqBAAACSF0rYLPWhXRh
+
+Please review the full policy documentation at your earliest convenience.
 
 If you believe you received this message in error or have questions about your responsibilities, please contact the GitHub administration team.
 
