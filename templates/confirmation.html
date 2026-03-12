@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ page_title | default("Confirmation") }}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f7f9fc;
+      margin: 0;
+      padding: 0;
+      color: #0b2a6b;
+    }
+    .container {
+      max-width: 700px;
+      margin: 80px auto;
+      background: #fff;
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    .icon {
+      font-size: 72px;
+      margin-bottom: 20px;
+    }
+    .icon.success { color: #28a745; }
+    .icon.info { color: #007bff; }
+    .icon.warning { color: #ffc107; }
+    h1 {
+      margin: 0 0 20px 0;
+      font-size: 28px;
+    }
+    h1.success { color: #28a745; }
+    h1.info { color: #007bff; }
+    h1.warning { color: #dc3545; }
+    .message {
+      font-size: 18px;
+      line-height: 1.6;
+      color: #333;
+      margin: 20px 0;
+    }
+    .info-box {
+      background: #e8f4f8;
+      border-left: 4px solid #007bff;
+      padding: 20px;
+      margin: 30px 0;
+      text-align: left;
+      border-radius: 4px;
+    }
+    .info-box p {
+      margin: 10px 0;
+      color: #0b2a6b;
+    }
+    .info-box strong {
+      color: #007bff;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #e0e0e0;
+      color: #666;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon {{ icon_type | default('success') }}">{{ icon | default('✓') }}</div>
+    <h1 class="{{ icon_type | default('success') }}">{{ heading }}</h1>
+    
+    <p class="message">{{ message }}</p>
+    
+    {% if submessage %}
+    <p class="message">{{ submessage }}</p>
+    {% endif %}
+    
+    {% if show_info_box %}
+    <div class="info-box">
+      <p><strong>{{ info_heading | default("What happens next?") }}</strong></p>
+      {% if email %}
+      <p>📧 A confirmation email will be sent to <strong>{{ email }}</strong></p>
+      {% endif %}
+      {% if info_items %}
+        {% for item in info_items %}
+        <p>{{ item | safe }}</p>
+        {% endfor %}
+      {% endif %}
+    </div>
+    {% endif %}
+    
+    <div class="footer">
+      <p>{{ footer_message | default("If you have any questions, please contact your sponsor or the GSL ITS Team.") }}</p>
+    </div>
+  </div>
+</body>
+</html>

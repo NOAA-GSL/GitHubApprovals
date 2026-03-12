@@ -35,12 +35,20 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 #Copy the notifications files into the root directory of the container
 COPY dependabotalerts.py /dependabotalerts.py
 COPY dependabotalerts_runner.py /dependabotalerts_runner.py
-COPY informationowners.csv /informationowners.csv
 COPY lab_sponsors.csv /lab_sponsors.csv
 
+# Copy migration script for database setup
+COPY migrate_csv_to_db.py /migrate_csv_to_db.py
+
+# Keep CSV in root for backward compatibility and as migration source
+COPY informationowners.csv /informationowners.csv
 
 # Create the necessary directories
 RUN mkdir -p /data /templates /images
+
+# Also copy to /data (for new deployments without existing volume data)
+# Note: If volume already has this file, the volume mount will overlay this
+COPY informationowners.csv /data/informationowners.csv
 
 # Copy the templates and images into the root directory of the container
 COPY templates /templates

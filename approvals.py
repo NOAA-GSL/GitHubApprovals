@@ -62,6 +62,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import logging
 from pydantic import BaseModel
+from typing import Optional
 import pandas as pd
 import threading
 import time
@@ -98,11 +99,29 @@ def get_stakeholders(lab, sponsor):
     stakeholders = [email.strip() for email in stakeholders_str.split(",") if email.strip()]
     # Add sponsor and admin email as before
     stakeholders.append(sponsor)
-    stakeholders.append("renn.valo@noaa.gov")
-    logging.info(f"[STAKEHOLDER] Resolved stakeholders for lab={lab}: System Owner={stakeholders[0]}, Account Admin={stakeholders[1]}, ISSO={stakeholders[2]}, Sponsor={stakeholders[3]}, Setup Admin={stakeholders[4]}")
+    # Add all automation owners
+    for owner in get_automation_owners():
+        stakeholders.append(owner)
+    logging.info(f"[STAKEHOLDER] Resolved stakeholders for lab={lab}: System Owner={stakeholders[0]}, Account Admin={stakeholders[1]}, ISSO={stakeholders[2]}, Sponsor={stakeholders[3]}, Automation Owners={stakeholders[4:]}")
     return stakeholders
-    # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th is the email of the person who will setup the github account.
+    # 1st stakeholder is the GitHub System Owner 2nd is the GitHub Account Administrator 3rd is the GitHub Security Officer 4th is the sponsor, and 5th+ are the automation owner(s) who will setup the github account.
     # for testing set all emails to one person like this... return ["renn.valo@noaa.gov", "renn.valo@noaa.gov", "renn.valo@noaa.gov", sponsor, "renn.valo@noaa.gov"]
+
+def get_automation_owners():
+    """Parse AUTOMATION_OWNERS environment variable and return list of email addresses.
+    
+    Supports single email or comma-separated list of emails.
+    Defaults to 'renn.valo@noaa.gov' if not set or empty.
+    
+    Returns:
+        list: List of email addresses (at least one)
+    """
+    owners_str = os.getenv("AUTOMATION_OWNERS", "renn.valo@noaa.gov")
+    owners = [email.strip() for email in owners_str.split(",") if email.strip()]
+    # Ensure at least one owner is returned (fallback to default)
+    if not owners:
+        owners = ["renn.valo@noaa.gov"]
+    return owners
 
 # Check if we're in development or production mode
 IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development"
@@ -160,6 +179,10 @@ class UserAgreement(Base):
     email = Column(String, unique=True, index=True)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
+    github_username = Column(String, nullable=True, index=True)
+    information_owner = Column(Boolean, default=False, index=True)
+    welcome_email_sent = Column(Boolean, default=False)
+    info_owner_date_added = Column(DateTime, nullable=True)
     esrl_lab = Column(String, nullable=False)
     role = Column(String, nullable=False)
     agreed = Column(Boolean, default=False)
@@ -197,6 +220,9 @@ Base.metadata.create_all(bind=engine)
 scheduler = BackgroundScheduler()
 scheduler.start()
 
+# Track reminder jobs for each user email so we can cancel them later
+REMINDER_JOBS = {}
+
 # Function to check for users who need to renew and send reminder emails
 def check_for_renewals():
     session = SessionLocal()
@@ -211,8 +237,14 @@ def check_for_renewals():
     for user in users_to_renew:
         logging.info(f"[RENEWAL] Processing renewal for user_email={user.email}, last_renewal_date={user.last_renewal_date}")
 
-        # Generate the renewal link and message
-        renewal_link = f"{BASE_URL}/renew/{user.email}"
+        # Generate renewal token and store it
+        renewal_token = str(uuid.uuid4())
+        user.approval_token1 = renewal_token
+        session.commit()
+        logging.debug(f"[RENEWAL] Generated renewal token for user_email={user.email}")
+
+        # Generate the renewal link with token and message
+        renewal_link = f"{BASE_URL}/renew/{user.email}?token={renewal_token}"
         logging.debug(f"[RENEWAL] Generated renewal link for user_email={user.email}: {renewal_link}")
         message = f"""
         Dear {user.first_name},
@@ -241,6 +273,46 @@ def check_for_renewals():
 
     session.close()
 
+
+def recover_pending_approval_reminders():
+    """On server startup, find all pending approvals and schedule reminder jobs for them.
+    
+    This ensures that if the server restarts, pending approvals don't get stuck without reminders.
+    """
+    logging.info("[STARTUP] Checking for pending approvals to schedule reminder jobs...")
+    session = SessionLocal()
+    try:
+        # Find all users where:
+        # - Sponsor approved (sponsorid is set)
+        # - Still waiting for at least one stakeholder (systemowner, accountadmin, or isso not set)
+        # - Not denied (no disapproval fields set)
+        pending_users = session.query(UserAgreement).filter(
+            UserAgreement.sponsorid.isnot(None),
+            UserAgreement.sponsorid != "",
+            UserAgreement.sponsorid != "0"
+        ).all()
+        
+        recovered_count = 0
+        for user in pending_users:
+            # Check if fully approved - skip if so
+            if user.systemowner and user.accountadmin and user.isso:
+                continue
+            
+            # Check if denied - skip if so
+            if user.dissponsor or user.dissystemowner or user.disaccountadmin or user.disisso:
+                continue
+            
+            # This user has pending approvals - schedule reminder job
+            logging.info(f"[STARTUP] Recovering reminder job for pending approval: user_email={user.email}")
+            job = scheduler.add_job(send_reminder_emails, 'interval', hours=48, args=[user.email])
+            REMINDER_JOBS[user.email] = job
+            recovered_count += 1
+        
+        logging.info(f"[STARTUP] Recovered {recovered_count} pending approval reminder jobs")
+    except Exception as e:
+        logging.error(f"[STARTUP] Error recovering pending approval reminders: {str(e)}")
+    finally:
+        session.close()
 
 
 def send_email(recipient, subject, message):
@@ -379,23 +451,121 @@ def send_stakeholder_approval_emails(user_email):
         logging.info(f"[EMAIL] Stakeholder approval email sent: approver_id={idx}, role={role}, stakeholder={stakeholder}, user_email={user_email}")
 
     logging.info(f"[STAKEHOLDER] All stakeholder approval emails sent for user_email={user_email}")
-    scheduler.add_job(send_reminder_emails, 'interval', hours=48, args=[user_email])
+    # Schedule reminder emails every 48 hours (2 days) for stakeholders who haven't responded
+    job = scheduler.add_job(send_reminder_emails, 'interval', hours=48, args=[user_email])
+    REMINDER_JOBS[user_email] = job
+    logging.info(f"[STAKEHOLDER] Scheduled reminder job for user_email={user_email}, job_id={job.id}")
 
-def send_reminder_emails(user_email):
-    logging.info(f"[APPROVAL] Checking if reminder emails needed for user_email={user_email}")
+def send_renewal_confirmation_email(user_email):
+    """Send confirmation email after successful renewal."""
+    logging.info(f"[RENEWAL] Sending renewal confirmation email to user_email={user_email}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == user_email).first()
-    if not user or (user.systemowner and user.accountadmin and user.isso and user.sponsorid):
-        logging.debug(f"[APPROVAL] No reminder emails needed for user_email={user_email} (already fully approved or not found)")
+    
+    if not user:
+        logging.error(f"[RENEWAL] User not found for confirmation email: user_email={user_email}")
+        session.close()
         return
+    
+    # Calculate next renewal date (one year from now)
+    next_renewal_date = (datetime.utcnow() + timedelta(days=365)).strftime("%B %d, %Y")
+    
+    message = f"""
+Dear {user.first_name},
 
-    stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
-    for idx, stakeholder in enumerate(stakeholders, start=1):
-        if not getattr(user, f"approved{idx}"):
-            approval_link = f"{BASE_URL}/{user_email}/{idx}"
-            message = f"Reminder: Please approve the new user agreement from {user_email}. Click to approve: or ignore if you've already responded {approval_link}"
-            logging.info(f"[EMAIL] Sending reminder email: stakeholder={stakeholder}, approver_id={idx}, user_email={user_email}")
+Thank you for reviewing and agreeing to GSL's GitHub Usage Policy.
+
+Your renewal has been successfully completed! You are good for another year of GitHub access at NOAA GSL.
+
+Your next renewal will be due on or around: {next_renewal_date}
+
+You will receive a reminder email when it's time to renew again.
+
+If you have any questions about the GitHub Usage Policy or your access, please contact your sponsor or the GSL ITS Team.
+
+Thank you,
+Your GSL ITS Team
+    """
+    
+    send_email(user_email, "GitHub Access Renewed Successfully", message)
+    logging.info(f"[EMAIL] Renewal confirmation sent to user_email={user_email}")
+    session.close()
+
+def send_reminder_emails(user_email):
+    """Send reminder emails to stakeholders who haven't responded yet."""
+    logging.info(f"[APPROVAL] Checking if reminder emails needed for user_email={user_email}")
+    session = SessionLocal()
+    try:
+        user = session.query(UserAgreement).filter(UserAgreement.email == user_email).first()
+        if not user:
+            logging.warning(f"[APPROVAL] User not found for reminders: user_email={user_email}")
+            return
+        
+        # Check if already fully approved - stop reminders
+        if user.systemowner and user.accountadmin and user.isso and user.sponsorid:
+            logging.info(f"[APPROVAL] User fully approved, cancelling reminder job: user_email={user_email}")
+            if user_email in REMINDER_JOBS:
+                REMINDER_JOBS[user_email].remove()
+                del REMINDER_JOBS[user_email]
+            return
+        
+        # Check if any disapprovals - stop reminders
+        if user.dissponsor or user.dissystemowner or user.disaccountadmin or user.disisso:
+            logging.info(f"[APPROVAL] User has disapprovals, cancelling reminder job: user_email={user_email}")
+            if user_email in REMINDER_JOBS:
+                REMINDER_JOBS[user_email].remove()
+                del REMINDER_JOBS[user_email]
+            return
+
+        stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
+        tokens = [user.approval_token1, user.approval_token2, user.approval_token3, user.approval_token4]
+        approval_fields = ['sponsorid', 'systemowner', 'accountadmin', 'isso']
+        stakeholder_roles = ["Sponsor", "System Owner", "Account Admin", "ISSO"]
+        
+        # Send reminders only to stakeholders who haven't responded
+        for idx, (stakeholder, token, field, role) in enumerate(zip(stakeholders[0:4], tokens, approval_fields, stakeholder_roles), start=1):
+            approval_value = getattr(user, field)
+            disapproval_field = f"dis{field}" if field != 'sponsorid' else 'dissponsor'
+            disapproval_value = getattr(user, disapproval_field)
+            
+            # Skip if this stakeholder already responded (approved or disapproved)
+            if approval_value or disapproval_value:
+                logging.debug(f"[APPROVAL] Skipping reminder for {role} (already responded): user_email={user_email}")
+                continue
+            
+            # Send reminder
+            approval_link = f"{BASE_URL}/approve_user/{user_email}/{idx}?token={token}"
+            refusal_link = f"{BASE_URL}/refuse_user/{user_email}/{idx}?token={token}"
+            
+            message = f"""
+Dear GitHub Stakeholder ({role}),
+
+NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
+
+This is a reminder that {user_email} is awaiting your approval to join GSL's GitHub.
+
+Do you approve or refuse {user_email}'s request to join GSL's GitHub?:
+- Approve: 
+{approval_link}
+
+- Refuse: 
+{refusal_link}
+
+Thank you for your prompt attention to this matter.
+
+NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
+
+Best regards,
+Your Approval Team
+            """
+            
+            logging.info(f"[EMAIL] Sending reminder to {role}: stakeholder={stakeholder}, user_email={user_email}")
             send_email(stakeholder, "Reminder: User Agreement Approval Needed", message)
+    
+    except Exception as e:
+        logging.error(f"[APPROVAL] Error sending reminder emails for user_email={user_email}: {str(e)}")
+    finally:
+        session.close()
 
 @app.get("/", response_class=HTMLResponse)
 async def get_agreement_form(request: Request):
@@ -506,6 +676,9 @@ class UpdateAgreementRequest(BaseModel):
     role: str
     agreed: bool
     last_renewal_date: datetime  # New field for last renewal date
+    github_username: Optional[str] = None
+    information_owner: Optional[bool] = False
+    welcome_email_sent: Optional[bool] = False
 
 @app.put("/api/agreements/{email}")
 async def update_agreement(
@@ -530,6 +703,9 @@ async def update_agreement(
     user_agreement.role = request.role
     user_agreement.agreed = request.agreed
     user_agreement.last_renewal_date = request.last_renewal_date
+    user_agreement.github_username = request.github_username
+    user_agreement.information_owner = request.information_owner
+    user_agreement.welcome_email_sent = request.welcome_email_sent
     session.commit()
     return {"message": "Agreement updated successfully"}
 
@@ -771,8 +947,8 @@ async def submit_agreement(
     finally:
         session.close()
 
-@app.get("/approve_user/{email}/{approver_id}")
-async def approve_user(email: str, approver_id: int, token: str):
+@app.get("/approve_user/{email}/{approver_id}", response_class=HTMLResponse)
+async def approve_user(request: Request, email: str, approver_id: int, token: str):
     logging.info(f"[APPROVAL] Approval endpoint called: user_email={email}, approver_id={approver_id}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
@@ -835,11 +1011,35 @@ async def approve_user(email: str, approver_id: int, token: str):
         session.commit()
         logging.info(f"[APPROVAL] All approvals complete for user_email={email}, triggering final confirmation, final_timestamp={user.final_approval_timestamp.isoformat()}")
         send_final_confirmation_email(user.email, user.sponsor, user.esrl_lab)
+        
+        # Cancel reminder job since approval is complete
+        if email in REMINDER_JOBS:
+            try:
+                REMINDER_JOBS[email].remove()
+                del REMINDER_JOBS[email]
+                logging.info(f"[APPROVAL] Cancelled reminder job for fully approved user: user_email={email}")
+            except Exception as e:
+                logging.warning(f"[APPROVAL] Failed to cancel reminder job for user_email={email}: {str(e)}")
 
-    return {"message": "Your approval has been received and the request will now continue through the approval process. Once the candidate is either approved or denied, you'll receive an update via email with access status confirmation."}
+    session.close()
+    return templates.TemplateResponse("confirmation.html", {
+        "request": request,
+        "page_title": "Approval Received",
+        "heading": "Approval Received!",
+        "message": "Thank you for your response.",
+        "submessage": "Your approval has been received and the request will now continue through the approval process.",
+        "icon_type": "success",
+        "icon": "✓",
+        "show_info_box": True,
+        "info_items": [
+            "✅ Your response has been recorded",
+            "📧 Once the candidate is either approved or denied, you'll receive an update via email"
+        ],
+        "footer_message": "If you have any questions, please contact the GSL ITS Team."
+    })
 
-@app.get("/refuse_user/{email}/{approver_id}")
-async def refuse_user(email: str, approver_id: int, token: str):
+@app.get("/refuse_user/{email}/{approver_id}", response_class=HTMLResponse)
+async def refuse_user(request: Request, email: str, approver_id: int, token: str):
     logging.info(f"[APPROVAL] REFUSAL endpoint called: user_email={email}, approver_id={approver_id}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
@@ -864,32 +1064,53 @@ async def refuse_user(email: str, approver_id: int, token: str):
         raise HTTPException(status_code=403, detail="Invalid token")
 
     if approver_id == 1:
-        user.dissystemowner = stakeholders[0] 
-        user.approval_timestamp1 = datetime.utcnow()
-        user.disapprover_email1 = stakeholders[0]
-        logging.info(f"[APPROVAL] Sponsor refused: user_email={email}, disapprover={stakeholders[0]}, timestamp={user.approval_timestamp1.isoformat()}")
-    elif approver_id == 2:
-        user.disaccountadmin = stakeholders[1] 
-        user.approval_timestamp2 = datetime.utcnow()
-        user.disapprover_email2= stakeholders[1]
-        logging.info(f"[APPROVAL] System Owner refused: user_email={email}, disapprover={stakeholders[1]}, timestamp={user.approval_timestamp2.isoformat()}")
-    elif approver_id == 3:
-        user.disisso = stakeholders[2] 
-        user.approval_timestamp3 = datetime.utcnow()
-        user.disapprover_email3 = stakeholders[2]
-        logging.info(f"[APPROVAL] Account Admin refused: user_email={email}, disapprover={stakeholders[2]}, timestamp={user.approval_timestamp3.isoformat()}")
-    elif approver_id == 4:
         user.dissponsor = stakeholders[3] 
+        user.approval_timestamp1 = datetime.utcnow()
+        user.disapprover_email1 = stakeholders[3]
+        logging.info(f"[APPROVAL] Sponsor refused: user_email={email}, disapprover={stakeholders[3]}, timestamp={user.approval_timestamp1.isoformat()}")
+    elif approver_id == 2:
+        user.dissystemowner = stakeholders[0] 
+        user.approval_timestamp2 = datetime.utcnow()
+        user.disapprover_email2 = stakeholders[0]
+        logging.info(f"[APPROVAL] System Owner refused: user_email={email}, disapprover={stakeholders[0]}, timestamp={user.approval_timestamp2.isoformat()}")
+    elif approver_id == 3:
+        user.disaccountadmin = stakeholders[1] 
         user.approval_timestamp3 = datetime.utcnow()
-        user.disapprover_email4 = stakeholders[3]
-        logging.info(f"[APPROVAL] ISSO refused: user_email={email}, disapprover={stakeholders[3]}, timestamp={user.approval_timestamp3.isoformat()}")
+        user.disapprover_email3 = stakeholders[1]
+        logging.info(f"[APPROVAL] Account Admin refused: user_email={email}, disapprover={stakeholders[1]}, timestamp={user.approval_timestamp3.isoformat()}")
+    elif approver_id == 4:
+        user.disisso = stakeholders[2] 
+        user.approval_timestamp4 = datetime.utcnow()
+        user.disapprover_email4 = stakeholders[2]
+        logging.info(f"[APPROVAL] ISSO refused: user_email={email}, disapprover={stakeholders[2]}, timestamp={user.approval_timestamp4.isoformat()}")
 
     session.commit()
 
     logging.info(f"[EMAIL] Sending disapproval notification to user_email={email}")
     send_email(user.email, "GitHub Access Request Disapproved", "Your request to join GitHub has been denied.  Email help@gsl.noaa.gov if you have any questions.")
     logging.info(f"[APPROVAL] User disapproved and notified: user_email={email}, approver_id={approver_id}")
-    return {"message": "User disapproved"}
+    
+    # Cancel reminder job since user has been denied
+    if email in REMINDER_JOBS:
+        try:
+            REMINDER_JOBS[email].remove()
+            del REMINDER_JOBS[email]
+            logging.info(f"[APPROVAL] Cancelled reminder job for denied user: user_email={email}")
+        except Exception as e:
+            logging.warning(f"[APPROVAL] Failed to cancel reminder job for user_email={email}: {str(e)}")
+    
+    session.close()
+    return templates.TemplateResponse("confirmation.html", {
+        "request": request,
+        "page_title": "Response Received",
+        "heading": "Response Received",
+        "message": "Thank you for your response.",
+        "submessage": "The candidate has been notified of the decision.",
+        "icon_type": "info",
+        "icon": "ℹ",
+        "show_info_box": False,
+        "footer_message": "If you have any questions, please contact the GSL ITS Team."
+    })
 
 @app.get("/download-agreements/")
 def download_agreements():
@@ -921,22 +1142,107 @@ async def get_lab_sponsors():
     return sponsors_by_lab
 
 # Add a new endpoint for users to renew their agreement
-@app.get("/renew/{email}")
-async def renew_agreement(email: str):
-    logging.info(f"[RENEWAL] Renewal endpoint called: user_email={email}")
+@app.get("/renew/{email}", response_class=HTMLResponse)
+async def renew_agreement(request: Request, email: str, token: str = None):
+    logging.info(f"[RENEWAL] Renewal endpoint called: user_email={email}, token_provided={token is not None}")
     session = SessionLocal()
     user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
     if not user:
         logging.error(f"[RENEWAL] User not found for renewal: user_email={email}")
-        raise HTTPException(status_code=404, detail="User not found")
+        session.close()
+        return templates.TemplateResponse("confirmation.html", {
+            "request": request,
+            "page_title": "User Not Found",
+            "heading": "User Not Found",
+            "message": "We couldn't find an agreement associated with this email address.",
+            "submessage": "Please contact the GSL ITS Team if you believe this is an error.",
+            "icon_type": "error",
+            "icon": "✗",
+            "show_info_box": False,
+            "email": email,
+            "footer_message": "For assistance, please contact the GSL ITS Team."
+        })
+
+    # Check if token is missing
+    if token is None:
+        logging.warning(f"[RENEWAL] No token provided for user_email={email}")
+        session.close()
+        return templates.TemplateResponse("confirmation.html", {
+            "request": request,
+            "page_title": "Token Required",
+            "heading": "Renewal Link Invalid",
+            "message": "This renewal link is incomplete or has expired.",
+            "submessage": "Please use the renewal link from your most recent reminder email.",
+            "icon_type": "error",
+            "icon": "✗",
+            "show_info_box": True,
+            "email": email,
+            "info_items": [
+                "🔗 Renewal links must include a security token",
+                "📧 Check your email for the complete renewal link",
+                "⏰ Tokens expire after use for security",
+                "❓ Contact the GSL ITS Team if you need a new renewal link"
+            ],
+            "footer_message": "For assistance, please contact the GSL ITS Team."
+        })
+
+    # Validate the renewal token
+    if user.approval_token1 != token:
+        logging.warning(f"[RENEWAL] Invalid token provided for user_email={email}")
+        session.close()
+        return templates.TemplateResponse("confirmation.html", {
+            "request": request,
+            "page_title": "Invalid Token",
+            "heading": "Renewal Link Invalid",
+            "message": "This renewal link is invalid or has already been used.",
+            "submessage": "Please use the renewal link from your most recent reminder email.",
+            "icon_type": "error",
+            "icon": "✗",
+            "show_info_box": True,
+            "email": email,
+            "info_items": [
+                "🔒 Each renewal link can only be used once",
+                "📧 Check your email for the latest renewal link",
+                "⏰ Old links expire after use for security",
+                "❓ Contact the GSL ITS Team if you need a new renewal link"
+            ],
+            "footer_message": "For assistance, please contact the GSL ITS Team."
+        })
 
     renewal_timestamp = datetime.utcnow()
     user.last_renewal_date = renewal_timestamp
+    # Clear the token after successful renewal
+    user.approval_token1 = None
     session.commit()
-    session.close()
     logging.info(f"[RENEWAL] Agreement renewed successfully: user_email={email}, renewal_timestamp={renewal_timestamp.isoformat()}")
-
-    return {"message": "Agreement renewed successfully"}
+    
+    # Calculate next renewal date for display
+    next_renewal_date = (datetime.utcnow() + timedelta(days=365)).strftime("%B %d, %Y")
+    
+    # Send confirmation email
+    try:
+        send_renewal_confirmation_email(email)
+    except Exception as e:
+        logging.error(f"[RENEWAL] Failed to send confirmation email to user_email={email}: {str(e)}")
+        # Don't fail the renewal if email fails
+    
+    session.close()
+    return templates.TemplateResponse("confirmation.html", {
+        "request": request,
+        "page_title": "Renewal Confirmed",
+        "heading": "Renewal Confirmed!",
+        "message": "Thank you for reviewing GSL's GitHub Usage Policy.",
+        "submessage": "Your response has been received and processed successfully.",
+        "icon_type": "success",
+        "icon": "✓",
+        "show_info_box": True,
+        "email": email,
+        "info_items": [
+            "✅ You're all set for another year of GitHub access!",
+            f"📅 Your next renewal will be due on or around: <strong>{next_renewal_date}</strong>"
+        ],
+        "footer_message": "If you have any questions about the GitHub Usage Policy or your access, please contact your sponsor or the GSL ITS Team."
+    })
 
 from dotenv import dotenv_values
 
@@ -997,5 +1303,7 @@ def send_final_confirmation_email(user_email, sponsor, lab):
 #check_for_renewals()  # Initial check for renewals on launch of the server
 scheduler.add_job(check_for_renewals, 'interval', days=3)  # Check every three days
 
+# On startup, recover reminder jobs for any pending approvals
+recover_pending_approval_reminders()
 
 #testing workflow for sending emails to stakeholders when a user is approved by their sponsor

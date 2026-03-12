@@ -180,7 +180,9 @@ class TestApprovalWorkflow:
         response = client.get(f"/approve_user/approve1@noaa.gov/1?token={token1}")
         
         assert response.status_code == 200
-        assert "approval has been received" in response.json()["message"].lower()
+        # Now returns HTML instead of JSON
+        assert b"Approval Received" in response.content
+        assert b"approval has been received" in response.content.lower()
         
         # Verify stakeholder emails were sent after stage 1 approval
         assert mock_send_email.called
@@ -261,7 +263,9 @@ class TestApprovalWorkflow:
         response = client.get(f"/refuse_user/refuse1@noaa.gov/1?token={token1}")
         
         assert response.status_code == 200
-        assert "disapproved" in response.json()["message"].lower()
+        # Now returns HTML instead of JSON
+        assert b"Response Received" in response.content
+        assert b"candidate has been notified" in response.content.lower()
         
         # Verify refusal email was sent
         assert mock_send_email.called
@@ -302,26 +306,30 @@ class TestRenewalWorkflow:
     def test_renew_agreement_success(self, client, create_user_agreement, mock_send_email):
         """Test successful agreement renewal."""
         old_date = datetime.utcnow() - timedelta(days=400)
+        renewal_token = "renewal-test-token"
         user = create_user_agreement(
             email="renew@noaa.gov",
             last_renewal_date=old_date,
+            approval_token1=renewal_token,
             sponsorid="sponsor@noaa.gov",
             systemowner="owner@noaa.gov",
             accountadmin="admin@noaa.gov",
             isso="isso@noaa.gov"
         )
         
-        response = client.get(f"/renew/renew@noaa.gov")
+        response = client.get(f"/renew/renew@noaa.gov?token={renewal_token}")
         
         assert response.status_code == 200
-        assert "renewed successfully" in response.json()["message"].lower()
+        # Now returns HTML instead of JSON
+        assert b"Renewal Confirmed" in response.content
+        assert b"renewed successfully" in response.content.lower() or b"all set for another year" in response.content.lower()
 
     def test_renew_nonexistent_user(self, client):
-        """Test renewal for non-existent user."""
-        response = client.get("/renew/notfound@noaa.gov")
+        """Test renewal for non-existent user returns user-friendly HTML page."""
+        response = client.get("/renew/notfound@noaa.gov?token=any-token")
         
-        assert response.status_code == 404
-        assert "not found" in response.json()["detail"].lower()
+        assert response.status_code == 200
+        assert b"User Not Found" in response.content or b"not found" in response.content.lower()
 
 
 @pytest.mark.unit
