@@ -19,6 +19,41 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+def parse_date_to_iso(date_str):
+    """Parse various date formats to ISO datetime format (YYYY-MM-DD HH:MM:SS).
+    
+    Handles:
+    - M/D/YYYY (e.g., 3/6/2026)
+    - MM/DD/YYYY (e.g., 03/06/2026)
+    - YYYY-MM-DD (already ISO)
+    - ISO datetime strings
+    
+    Returns full datetime string for SQLAlchemy DateTime columns.
+    """
+    if not date_str or date_str.strip() == "":
+        return None
+    
+    date_str = date_str.strip()
+    
+    # Try various formats
+    formats = [
+        "%m/%d/%Y",      # 3/6/2026 or 03/06/2026
+        "%Y-%m-%d",      # 2026-03-06
+        "%Y-%m-%d %H:%M:%S",  # 2026-03-06 12:00:00
+    ]
+    
+    for fmt in formats:
+        try:
+            parsed_date = datetime.strptime(date_str, fmt)
+            # Return full datetime string for SQLAlchemy DateTime columns
+            return parsed_date.strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+    
+    # If nothing worked, return None and log warning
+    print(f"    ⚠️  Warning: Could not parse date '{date_str}', will use current date")
+    return None
+
 def get_database_path():
     """Determine database path (production vs development)."""
     if os.path.exists("/data/agreement.db"):
@@ -144,7 +179,8 @@ def migrate_csv_to_database(conn, info_owners, dry_run=False):
                              info_owner_date_added = ?
                          WHERE email = ?"""
                 
-                date_str = date_added if date_added else datetime.now().strftime("%Y-%m-%d")
+                # Parse date to ISO format (handles M/D/YYYY format from CSV)
+                date_str = parse_date_to_iso(date_added) or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
                 if not dry_run:
                     cursor.execute(sql, (username, 1 if welcome_sent else 0, date_str, email))
@@ -162,7 +198,8 @@ def migrate_csv_to_database(conn, info_owners, dry_run=False):
                       info_owner_date_added, timestamp)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
             
-            date_str = date_added if date_added else datetime.now().strftime("%Y-%m-%d")
+            # Parse date to ISO format (handles M/D/YYYY format from CSV)
+            date_str = parse_date_to_iso(date_added) or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             timestamp = datetime.now().isoformat()
             
             if not dry_run:
