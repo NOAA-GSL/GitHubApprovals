@@ -37,6 +37,9 @@ COPY dependabotalerts.py /dependabotalerts.py
 COPY dependabotalerts_runner.py /dependabotalerts_runner.py
 COPY lab_sponsors.csv /lab_sponsors.csv
 
+# Copy migration script for database setup
+COPY migrate_csv_to_db.py /migrate_csv_to_db.py
+
 # Keep CSV in root for backward compatibility and as migration source
 COPY informationowners.csv /informationowners.csv
 
