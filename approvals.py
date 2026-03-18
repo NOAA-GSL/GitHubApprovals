@@ -67,6 +67,7 @@ import pandas as pd
 import threading
 import time
 from verification_progress_gif import create_progress_gif
+import sqlite3
 
 # Configure logging with file handler and structured format
 logging.basicConfig(
@@ -214,8 +215,50 @@ class UserAgreement(Base):
     disapprover_email2 = Column(String)  
     disapprover_email3 = Column(String)  
     disapprover_email4 = Column(String)  
+    last_reminder_sent = Column(DateTime, nullable=True)  # Track when last reminder was sent
 
 Base.metadata.create_all(bind=engine)
+
+def migrate_add_last_reminder_sent_column():
+    """Add last_reminder_sent column to existing database if it doesn't exist.
+    
+    This migration is idempotent and safe to run multiple times.
+    """
+    
+    # Determine database path
+    if IS_DEVELOPMENT:
+        db_path = "./agreement.db"
+    else:
+        db_path = "/data/agreement.db"
+    
+    # Check if database file exists
+    if not os.path.exists(db_path):
+        logging.info("[MIGRATION] Database not found, will be created by SQLAlchemy")
+        return
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Check if column already exists
+        cursor.execute("PRAGMA table_info(user_agreements)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        if "last_reminder_sent" not in columns:
+            logging.info("[MIGRATION] Adding last_reminder_sent column to user_agreements table")
+            cursor.execute("ALTER TABLE user_agreements ADD COLUMN last_reminder_sent TEXT")
+            conn.commit()
+            logging.info("[MIGRATION] Successfully added last_reminder_sent column")
+        else:
+            logging.info("[MIGRATION] last_reminder_sent column already exists, skipping")
+        
+        conn.close()
+    except Exception as e:
+        logging.error(f"[MIGRATION] Error adding last_reminder_sent column: {str(e)}")
+        raise
+
+# Run migration immediately after schema creation
+migrate_add_last_reminder_sent_column()
 
 scheduler = BackgroundScheduler()
 scheduler.start()
@@ -303,10 +346,14 @@ def recover_pending_approval_reminders():
                 continue
             
             # This user has pending approvals - schedule reminder job
-            logging.info(f"[STARTUP] Recovering reminder job for pending approval: user_email={user.email}")
-            job = scheduler.add_job(send_reminder_emails, 'interval', hours=48, args=[user.email])
-            REMINDER_JOBS[user.email] = job
-            recovered_count += 1
+            # Check if job already exists to prevent duplicates
+            if user.email not in REMINDER_JOBS:
+                logging.info(f"[STARTUP] Recovering reminder job for pending approval: user_email={user.email}")
+                job = scheduler.add_job(send_reminder_emails, 'interval', hours=48, args=[user.email])
+                REMINDER_JOBS[user.email] = job
+                recovered_count += 1
+            else:
+                logging.debug(f"[STARTUP] Reminder job already exists for user_email={user.email}, skipping")
         
         logging.info(f"[STARTUP] Recovered {recovered_count} pending approval reminder jobs")
     except Exception as e:
@@ -451,7 +498,16 @@ def send_stakeholder_approval_emails(user_email):
         logging.info(f"[EMAIL] Stakeholder approval email sent: approver_id={idx}, role={role}, stakeholder={stakeholder}, user_email={user_email}")
 
     logging.info(f"[STAKEHOLDER] All stakeholder approval emails sent for user_email={user_email}")
+    
     # Schedule reminder emails every 48 hours (2 days) for stakeholders who haven't responded
+    # Cancel existing job if it exists to prevent duplicates
+    if user_email in REMINDER_JOBS:
+        try:
+            REMINDER_JOBS[user_email].remove()
+            logging.info(f"[STAKEHOLDER] Removed existing reminder job for user_email={user_email}")
+        except Exception as e:
+            logging.warning(f"[STAKEHOLDER] Failed to remove existing job for user_email={user_email}: {str(e)}")
+    
     job = scheduler.add_job(send_reminder_emails, 'interval', hours=48, args=[user_email])
     REMINDER_JOBS[user_email] = job
     logging.info(f"[STAKEHOLDER] Scheduled reminder job for user_email={user_email}, job_id={job.id}")
@@ -516,6 +572,14 @@ def send_reminder_emails(user_email):
                 REMINDER_JOBS[user_email].remove()
                 del REMINDER_JOBS[user_email]
             return
+        
+        # Check if reminder was sent less than 24 hours ago
+        if user.last_reminder_sent:
+            time_since_last_reminder = datetime.utcnow() - user.last_reminder_sent
+            if time_since_last_reminder < timedelta(hours=24):
+                hours_remaining = 24 - (time_since_last_reminder.total_seconds() / 3600)
+                logging.info(f"[APPROVAL] Skipping reminder (sent {time_since_last_reminder.total_seconds()/3600:.1f}h ago, {hours_remaining:.1f}h remaining): user_email={user_email}")
+                return
 
         stakeholders = get_stakeholders(user.esrl_lab, user.sponsor)
         tokens = [user.approval_token1, user.approval_token2, user.approval_token3, user.approval_token4]
@@ -561,6 +625,11 @@ Your Approval Team
             
             logging.info(f"[EMAIL] Sending reminder to {role}: stakeholder={stakeholder}, user_email={user_email}")
             send_email(stakeholder, "Reminder: User Agreement Approval Needed", message)
+        
+        # Update last_reminder_sent timestamp
+        user.last_reminder_sent = datetime.utcnow()
+        session.commit()
+        logging.info(f"[APPROVAL] Updated last_reminder_sent for user_email={user_email}")
     
     except Exception as e:
         logging.error(f"[APPROVAL] Error sending reminder emails for user_email={user_email}: {str(e)}")
