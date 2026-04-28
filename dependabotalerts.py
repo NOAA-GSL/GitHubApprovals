@@ -529,7 +529,7 @@ As a repository administrator (Information Owner), you are required to follow NO
 You will receive automated notifications about Dependabot security alerts for your repositories.
 
 Policy Documentation:
-https://docs.google.com/document/d/1myfENqhtMSvlcrqBAAACSF0rYLPWhXRh
+https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k/
 
 Please review the full policy documentation at your earliest convenience.
 

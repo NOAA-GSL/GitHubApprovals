@@ -299,7 +299,7 @@ def check_for_renewals():
             To continue as a GSL GitHub contributor you will need to:
             Read and understand the roles and responsibilities for being a GSL GitHub {user.role}.  
             The latest updates to GSL's GitHub Usage Policy can be found here:
-            https://docs.google.com/document/d/1myfENqhtMSvlcrqBAAACSF0rYLPWhXRh/
+            https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k/
            
         Agree to follow the roles and responsibilities for being a GSL team member by clicking the link below:
         {renewal_link}
