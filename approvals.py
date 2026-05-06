@@ -1202,11 +1202,20 @@ def download_agreements():
 # new endpoint to get the list of labs and their sponsors
 @app.get("/api/lab_sponsors")
 async def get_lab_sponsors():
-    df = pd.read_csv("/lab_sponsors.csv")
+    if "githubapprovals" not in BASE_URL:
+        csv_path = "lab_sponsors.csv"  # local dev / test
+    else:
+        csv_path = "/data/lab_sponsors.csv"  # production volume
+    df = pd.read_csv(csv_path)
     sponsors_by_lab = {}
     for _, row in df.iterrows():
         lab = row['lab']
-        sponsor = {"value": row['email'], "text": row['name']}
+        name = row.get('name')
+        email = row.get('email')
+        if pd.isna(name) or pd.isna(email):
+            logging.warning(f"[LAB_SPONSORS] Skipping row with missing name or email: lab={lab}")
+            continue
+        sponsor = {"value": str(email), "text": str(name)}
         sponsors_by_lab.setdefault(lab, []).append(sponsor)
     return sponsors_by_lab
 
