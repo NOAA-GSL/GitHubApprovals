@@ -289,29 +289,48 @@ def check_for_renewals():
         # Generate the renewal link with token and message
         renewal_link = f"{BASE_URL}/renew/{user.email}?token={renewal_token}"
         logging.debug(f"[RENEWAL] Generated renewal link for user_email={user.email}: {renewal_link}")
-        message = f"""
-        Dear {user.first_name},
+        lab = user.esrl_lab.upper()
+        policy_link = "https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k/"
+        message = f"""Dear {user.first_name},
 
-        NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
+NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
 
-        It has been over a year since your last review of GSL's GitHub Usage Policy Agreement. 
+It has been over a year since your last review of GSL's GitHub Usage Policy Agreement.
 
-            To continue as a GSL GitHub contributor you will need to:
-            Read and understand the roles and responsibilities for being a GSL GitHub {user.role}.  
-            The latest updates to GSL's GitHub Usage Policy can be found here:
-            https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k/
-           
-        Agree to follow the roles and responsibilities for being a GSL team member by clicking the link below:
-        {renewal_link}
+To continue as a member of NOAA's {lab} GitHub organization you will need to:
+  - Read and understand the roles and responsibilities for being a GSL GitHub {user.role}.
+  - The latest updates to GSL's GitHub Usage Policy can be found here: {policy_link}
 
-        NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
-        
-        Thank you,
-        Your GSL ITS Team
-        """
-            
+Agree to follow the roles and responsibilities by clicking the link below:
+{renewal_link}
+
+NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
+
+Thank you,
+Your GSL ITS Team"""
+        html_body = _build_approval_html_email(
+            title="Action Required: Annual Agreement Renewal",
+            greeting=f"Dear {user.first_name},",
+            intro_lines=[
+                f"It has been over a year since your last review of GSL's GitHub Usage Policy Agreement.",
+                f"To continue as a member of NOAA's <strong>{lab} GitHub organization</strong> as a <strong>{user.role}</strong>, you must renew your agreement.",
+            ],
+            details_rows=[
+                ("Lab", f"NOAA's {lab} GitHub organization"),
+                ("Your Role", user.role),
+                ("Action Required", "Renew your GitHub Usage Policy agreement"),
+            ],
+            action_items=[
+                f'Read the latest <a href="{policy_link}" style="color:#003087;">GSL GitHub Usage Policy</a>',
+                "Click the <strong>Renew Agreement</strong> button below to confirm",
+            ],
+            action_link=renewal_link,
+            action_label="Renew Agreement",
+            footer_note="If you have any questions, please contact the GSL ITS Team.",
+        )
+
         # Send email to the user
-        send_email(user.email, "Agreement Renewal Reminder", message)
+        send_email(user.email, "Agreement Renewal Reminder", message, html_body=html_body)
         logging.info(f"[EMAIL] Renewal reminder sent to user_email={user.email}")
 
     session.close()
@@ -362,7 +381,7 @@ def recover_pending_approval_reminders():
         session.close()
 
 
-def send_email(recipient, subject, message):
+def send_email(recipient, subject, message, html_body=None):
     logging.debug(f"[EMAIL] Preparing to send email: recipient={recipient}, subject={subject}, from=github.gsl@noaa.gov")
     sender_email = os.getenv("EMAIL_ADDRESS")
     password = os.getenv("EMAIL_PASSWORD")
@@ -374,13 +393,19 @@ def send_email(recipient, subject, message):
     #specify the alternative "from" email address
     from_email = "github.gsl@noaa.gov" #Alaternative email address authorized in Gmail account
 
-    msg = MIMEMultipart()
+    msg = MIMEMultipart("alternative")
     msg["From"] = from_email
     msg["To"] = recipient
     msg["Subject"] = subject
 
+    # Plain text part first (fallback for email clients that don't support HTML)
     body = MIMEText(message, "plain")
     msg.attach(body)
+
+    # HTML part second — email clients prefer the last/best part
+    if html_body:
+        html_part = MIMEText(html_body, "html")
+        msg.attach(html_part)
 
     context = ssl.create_default_context()
 
@@ -395,7 +420,138 @@ def send_email(recipient, subject, message):
     except Exception as e:
         logging.error(f"[EMAIL] Failed to send email to recipient={recipient}, subject={subject}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
-    
+
+
+def _build_approval_html_email(
+    title: str,
+    greeting: str,
+    intro_lines: list,
+    details_rows: list,
+    action_items: list,
+    approve_link: str = None,
+    refuse_link: str = None,
+    action_link: str = None,
+    action_label: str = None,
+    footer_note: str = None,
+    is_reminder: bool = False,
+) -> str:
+    """Build a modern NOAA-GSL branded HTML email with inline CSS.
+
+    Supports two button layouts:
+    - approve_link + refuse_link: side-by-side Approve / Refuse buttons
+    - action_link + action_label: single centered action button (e.g. renewal)
+    """
+    # Details table rows
+    table_rows_html = ""
+    for i, (label, value) in enumerate(details_rows):
+        bg = "#f5f7fa" if i % 2 == 0 else "#ffffff"
+        table_rows_html += (
+            f'<tr style="background-color:{bg};">'
+            f'<td style="padding:9px 14px;font-weight:600;color:#333;width:38%;border-bottom:1px solid #e0e0e0;">{label}</td>'
+            f'<td style="padding:9px 14px;color:#555;border-bottom:1px solid #e0e0e0;">{value}</td>'
+            f'</tr>'
+        )
+
+    details_table_html = (
+        '<table width="100%" cellpadding="0" cellspacing="0" '
+        'style="border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;margin:20px 0;">'
+        + table_rows_html +
+        '</table>'
+    ) if details_rows else ""
+
+    # Buttons
+    buttons_html = ""
+    if approve_link and refuse_link:
+        buttons_html = (
+            '<div style="margin:28px 0;text-align:center;">'
+            f'<a href="{approve_link}" style="display:inline-block;padding:14px 30px;background-color:#28a745;'
+            'color:#ffffff;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;margin-right:14px;">&#10003;&nbsp;Approve</a>'
+            f'<a href="{refuse_link}" style="display:inline-block;padding:14px 30px;background-color:#dc3545;'
+            'color:#ffffff;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;">&#10007;&nbsp;Refuse</a>'
+            '</div>'
+        )
+    elif action_link and action_label:
+        buttons_html = (
+            '<div style="margin:28px 0;text-align:center;">'
+            f'<a href="{action_link}" style="display:inline-block;padding:14px 36px;background-color:#003087;'
+            'color:#ffffff;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;">'
+            f'{action_label} &rarr;</a>'
+            '</div>'
+        )
+
+    # Intro paragraph(s)
+    intro_html = "".join(
+        f'<p style="margin:6px 0;color:#333;font-size:14px;">{line}</p>'
+        for line in intro_lines
+    )
+
+    # Action items list
+    action_items_html = "".join(
+        f'<li style="margin:6px 0;color:#555;font-size:14px;">{item}</li>'
+        for item in action_items
+    )
+    action_section = (
+        '<div style="background:#f0f4ff;border-left:4px solid #003087;padding:14px 18px;margin:20px 0;border-radius:0 6px 6px 0;">'
+        '<p style="margin:0 0 8px 0;font-weight:600;color:#003087;font-size:14px;">What to do next:</p>'
+        f'<ul style="margin:0;padding-left:20px;">{action_items_html}</ul>'
+        '</div>'
+    ) if action_items else ""
+
+    # VPN note — only shown when action links are present
+    vpn_note = (
+        '<div style="background:#fff8e1;border-left:4px solid #f9a825;padding:12px 16px;margin:18px 0;border-radius:0 6px 6px 0;">'
+        '<p style="margin:0;color:#5d4037;font-size:13px;"><strong>Note:</strong> You must be on the wired '
+        'network at NOAA or VPNed in to access the links in this email.</p>'
+        '</div>'
+    ) if (approve_link or refuse_link or action_link) else ""
+
+    reminder_badge = (
+        '<span style="display:inline-block;background:#e65100;color:#fff;font-size:11px;font-weight:700;'
+        'padding:2px 10px;border-radius:12px;margin-left:12px;vertical-align:middle;">REMINDER</span>'
+    ) if is_reminder else ""
+
+    footer = f'<p style="margin:0 0 4px 0;font-size:12px;color:#666;">{footer_note}</p>' if footer_note else ""
+
+    return (
+        '<!DOCTYPE html><html lang="en"><head>'
+        '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">'
+        '</head>'
+        '<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,Helvetica,sans-serif;">'
+        '<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:24px 0;">'
+        '<tr><td align="center">'
+        '<table width="620" cellpadding="0" cellspacing="0" '
+        'style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">'
+        # Header
+        '<tr><td style="background-color:#003087;padding:18px 28px;">'
+        '<p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:1px;">NOAA-GSL</p>'
+        '<p style="margin:4px 0 0 0;color:#a8c4e8;font-size:12px;">GitHub Access Management</p>'
+        '</td></tr>'
+        # Title bar
+        f'<tr><td style="background-color:#0d47a1;padding:11px 28px;">'
+        f'<p style="margin:0;color:#ffffff;font-size:14px;font-weight:600;">{title}{reminder_badge}</p>'
+        '</td></tr>'
+        # Body
+        '<tr><td style="padding:24px 28px;">'
+        f'<p style="margin:0 0 14px 0;color:#333;font-size:15px;">{greeting}</p>'
+        f'{intro_html}'
+        f'{vpn_note}'
+        f'{details_table_html}'
+        f'{buttons_html}'
+        f'{action_section}'
+        '</td></tr>'
+        # Footer
+        '<tr><td style="background-color:#f8f9fa;padding:14px 28px;border-top:1px solid #e0e0e0;">'
+        f'{footer}'
+        '<p style="margin:4px 0 0 0;font-size:11px;color:#aaa;">'
+        'NOAA-GSL &middot; Automated GitHub Access System &middot; '
+        'This is an automated message. Please do not reply to this email.</p>'
+        '</td></tr>'
+        '</table>'
+        '</td></tr></table>'
+        '</body></html>'
+    )
+
+
 def send_approval_emails(user_email):
     logging.info(f"[APPROVAL] Initiating sponsor approval email for user_email={user_email}")
     session = SessionLocal()
@@ -414,34 +570,53 @@ def send_approval_emails(user_email):
 
     # Extract first and last name from sponsor email
     sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
-    logging.info(f"[APPROVAL] Sponsor identified: sponsor_email={user.sponsor}, sponsor_name={sponsor_name}")
+    lab = user.esrl_lab.upper()
+    logging.info(f"[APPROVAL] Sponsor identified: sponsor_email={user.sponsor}, sponsor_name={sponsor_name}, lab={lab}")
 
     # Send approval email to the sponsor first
     approval_link = f"{BASE_URL}/approve_user/{user_email}/1?token={user.approval_token1}"
     refusal_link = f"{BASE_URL}/refuse_user/{user_email}/1?token={user.approval_token1}"
-    message = f"""
-    Dear {sponsor_name},
+    message = f"""Dear {sponsor_name},
 
-    NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
+NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
 
-    You have sponsored {user_email} to join GSL's GitHub.
-    
-    Do you approve or refuse {user_email}'s request to join GSL's GitHub?:
-    - Approve: 
-    {approval_link}
+You have sponsored {user_email} to join NOAA's {lab} GitHub organization.
 
-    - Refuse: 
-    {refusal_link}
+Do you approve or refuse {user_email}'s request to join NOAA's {lab} GitHub organization?:
+- Approve:
+{approval_link}
 
-    Thank you for your prompt attention to this matter.
+- Refuse:
+{refusal_link}
 
-    NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
+Thank you for your prompt attention to this matter.
 
-    Best regards,
-    Your Approval Team
-    """
+NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
+
+Best regards,
+Your Approval Team"""
+    html_body = _build_approval_html_email(
+        title="Action Required: GitHub Access Approval",
+        greeting=f"Dear {sponsor_name},",
+        intro_lines=[
+            f"You have sponsored <strong>{user_email}</strong> to join NOAA's <strong>{lab} GitHub organization</strong>.",
+            "Please review this request and indicate your approval or refusal below.",
+        ],
+        details_rows=[
+            ("Applicant Email", user_email),
+            ("Lab", f"NOAA's {lab} GitHub organization"),
+            ("Your Role", "Sponsor"),
+        ],
+        action_items=[
+            "Review the request details above",
+            "Click <strong>Approve</strong> to approve or <strong>Refuse</strong> to deny access",
+        ],
+        approve_link=approval_link,
+        refuse_link=refusal_link,
+        footer_note="If you have any questions, please contact the GSL ITS Team.",
+    )
     logging.info(f"[EMAIL] Sending sponsor approval request: recipient={user.sponsor}, user_email={user_email}, approval_link={approval_link}")
-    send_email(user.sponsor, "User Agreement Approval Needed", message)
+    send_email(user.sponsor, "User Agreement Approval Needed", message, html_body=html_body)
     logging.info(f"[APPROVAL] Sponsor approval email sent successfully to sponsor={user.sponsor} for user_email={user_email}")
 
 def send_stakeholder_approval_emails(user_email):
@@ -458,7 +633,8 @@ def send_stakeholder_approval_emails(user_email):
 
     # Extract first and last name from sponsor email
     sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
-    logging.info(f"[STAKEHOLDER] Sponsor info: sponsor_name={sponsor_name}, sponsor_email={user.sponsor}, lab={user.esrl_lab}")
+    lab = user.esrl_lab.upper()
+    logging.info(f"[STAKEHOLDER] Sponsor info: sponsor_name={sponsor_name}, sponsor_email={user.sponsor}, lab={lab}")
 
     # Get the number of active licenses from the database
     rowsindatabase = session.query(UserAgreement).count()
@@ -471,30 +647,50 @@ def send_stakeholder_approval_emails(user_email):
         refusal_link = f"{BASE_URL}/refuse_user/{user_email}/{idx}?token={token}"
         logging.info(f"[EMAIL] Preparing stakeholder approval email: approver_id={idx}, role={role}, stakeholder={stakeholder}, user_email={user_email}")
 
-        message = f"""
-        Dear GitHub Stakeholder,
+        message = f"""Dear GitHub Stakeholder ({role}),
 
-        NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
+NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
 
-        {sponsor_name} has sponsored {user_email} to join GSL's GitHub.
+{sponsor_name} has sponsored {user_email} to join NOAA's {lab} GitHub organization.
 
-        We currently have {rowsindatabase} active licenses with {available_licenses} licenses available for new members.
+We currently have {rowsindatabase} active licenses with {available_licenses} licenses available for new members.
 
-        Do you approve or refuse {user_email}'s request to join GSL's GitHub?:
-        - Approve: 
-        {approval_link}
+Do you approve or refuse {user_email}'s request to join NOAA's {lab} GitHub organization?:
+- Approve:
+{approval_link}
 
-        - Refuse: 
-        {refusal_link}
+- Refuse:
+{refusal_link}
 
-        Thank you for your prompt attention to this matter.
+Thank you for your prompt attention to this matter.
 
-        NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
+NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
 
-        Best regards,
-        Your Approval Team
-        """
-        send_email(stakeholder, "User Agreement Approval Needed", message)
+Best regards,
+Your Approval Team"""
+        html_body = _build_approval_html_email(
+            title="Action Required: GitHub Access Approval",
+            greeting="Dear GitHub Stakeholder,",
+            intro_lines=[
+                f"<strong>{sponsor_name}</strong> has sponsored <strong>{user_email}</strong> to join NOAA's <strong>{lab} GitHub organization</strong>.",
+                f"As <strong>{role}</strong>, your approval is required to proceed.",
+            ],
+            details_rows=[
+                ("Applicant Email", user_email),
+                ("Lab", f"NOAA's {lab} GitHub organization"),
+                ("Sponsor", sponsor_name),
+                ("Your Role", role),
+                ("Active Licenses", f"{rowsindatabase} in use, {available_licenses} available"),
+            ],
+            action_items=[
+                "Review the request details above",
+                "Click <strong>Approve</strong> to approve or <strong>Refuse</strong> to deny access",
+            ],
+            approve_link=approval_link,
+            refuse_link=refusal_link,
+            footer_note="If you have any questions, please contact the GSL ITS Team.",
+        )
+        send_email(stakeholder, "User Agreement Approval Needed", message, html_body=html_body)
         logging.info(f"[EMAIL] Stakeholder approval email sent: approver_id={idx}, role={role}, stakeholder={stakeholder}, user_email={user_email}")
 
     logging.info(f"[STAKEHOLDER] All stakeholder approval emails sent for user_email={user_email}")
@@ -525,13 +721,13 @@ def send_renewal_confirmation_email(user_email):
     
     # Calculate next renewal date (one year from now)
     next_renewal_date = (datetime.utcnow() + timedelta(days=365)).strftime("%B %d, %Y")
-    
-    message = f"""
-Dear {user.first_name},
+    lab = user.esrl_lab.upper()
+
+    message = f"""Dear {user.first_name},
 
 Thank you for reviewing and agreeing to GSL's GitHub Usage Policy.
 
-Your renewal has been successfully completed! You are good for another year of GitHub access at NOAA GSL.
+Your renewal has been successfully completed! You are good for another year of access to NOAA's {lab} GitHub organization.
 
 Your next renewal will be due on or around: {next_renewal_date}
 
@@ -540,10 +736,26 @@ You will receive a reminder email when it's time to renew again.
 If you have any questions about the GitHub Usage Policy or your access, please contact your sponsor or the GSL ITS Team.
 
 Thank you,
-Your GSL ITS Team
-    """
-    
-    send_email(user_email, "GitHub Access Renewed Successfully", message)
+Your GSL ITS Team"""
+    html_body = _build_approval_html_email(
+        title="GitHub Access Renewed Successfully",
+        greeting=f"Dear {user.first_name},",
+        intro_lines=[
+            "Thank you for reviewing and agreeing to GSL's GitHub Usage Policy.",
+            f"Your renewal has been successfully completed! You are good for another year of access to NOAA's <strong>{lab} GitHub organization</strong>.",
+        ],
+        details_rows=[
+            ("Status", "&#10003; Renewed"),
+            ("Next Renewal Due", next_renewal_date),
+        ],
+        action_items=[
+            "No further action is required at this time",
+            "You will receive a reminder email when it is time to renew again",
+        ],
+        footer_note="If you have any questions, please contact your sponsor or the GSL ITS Team.",
+    )
+
+    send_email(user_email, "GitHub Access Renewed Successfully", message, html_body=html_body)
     logging.info(f"[EMAIL] Renewal confirmation sent to user_email={user_email}")
     session.close()
 
@@ -585,6 +797,8 @@ def send_reminder_emails(user_email):
         tokens = [user.approval_token1, user.approval_token2, user.approval_token3, user.approval_token4]
         approval_fields = ['sponsorid', 'systemowner', 'accountadmin', 'isso']
         stakeholder_roles = ["Sponsor", "System Owner", "Account Admin", "ISSO"]
+        lab = user.esrl_lab.upper()
+        sponsor_name = user.sponsor.split('@')[0].replace('.', ' ').title()
         
         # Send reminders only to stakeholders who haven't responded
         for idx, (stakeholder, token, field, role) in enumerate(zip(stakeholders[0:4], tokens, approval_fields, stakeholder_roles), start=1):
@@ -601,18 +815,17 @@ def send_reminder_emails(user_email):
             approval_link = f"{BASE_URL}/approve_user/{user_email}/{idx}?token={token}"
             refusal_link = f"{BASE_URL}/refuse_user/{user_email}/{idx}?token={token}"
             
-            message = f"""
-Dear GitHub Stakeholder ({role}),
+            message = f"""Dear GitHub Stakeholder ({role}),
 
 NOTE: You must be on the wired network at NOAA or VPNed in to access the links below.
 
-This is a reminder that {user_email} is awaiting your approval to join GSL's GitHub.
+This is a reminder that {user_email} is awaiting your approval to join NOAA's {lab} GitHub organization.
 
-Do you approve or refuse {user_email}'s request to join GSL's GitHub?:
-- Approve: 
+Do you approve or refuse {user_email}'s request to join NOAA's {lab} GitHub organization?:
+- Approve:
 {approval_link}
 
-- Refuse: 
+- Refuse:
 {refusal_link}
 
 Thank you for your prompt attention to this matter.
@@ -620,11 +833,30 @@ Thank you for your prompt attention to this matter.
 NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
 
 Best regards,
-Your Approval Team
-            """
+Your Approval Team"""
+            html_body = _build_approval_html_email(
+                title="Reminder: GitHub Access Approval Needed",
+                greeting="Dear GitHub Stakeholder,",
+                intro_lines=[
+                    f"This is a reminder that <strong>{user_email}</strong> is still awaiting your approval to join NOAA's <strong>{lab} GitHub organization</strong>.",
+                ],
+                details_rows=[
+                    ("Applicant Email", user_email),
+                    ("Lab", f"NOAA's {lab} GitHub organization"),
+                    ("Sponsor", sponsor_name),
+                    ("Your Role", role),
+                ],
+                action_items=[
+                    "Click <strong>Approve</strong> to approve or <strong>Refuse</strong> to deny access",
+                ],
+                approve_link=approval_link,
+                refuse_link=refusal_link,
+                footer_note="If you have any questions, please contact the GSL ITS Team.",
+                is_reminder=True,
+            )
             
             logging.info(f"[EMAIL] Sending reminder to {role}: stakeholder={stakeholder}, user_email={user_email}")
-            send_email(stakeholder, "Reminder: User Agreement Approval Needed", message)
+            send_email(stakeholder, "Reminder: User Agreement Approval Needed", message, html_body=html_body)
         
         # Update last_reminder_sent timestamp
         user.last_reminder_sent = datetime.utcnow()
@@ -1156,7 +1388,24 @@ async def refuse_user(request: Request, email: str, approver_id: int, token: str
     session.commit()
 
     logging.info(f"[EMAIL] Sending disapproval notification to user_email={email}")
-    send_email(user.email, "GitHub Access Request Disapproved", "Your request to join GitHub has been denied.  Email help@gsl.noaa.gov if you have any questions.")
+    lab_upper = user.esrl_lab.upper()
+    dis_message = f"Your request to join NOAA's {lab_upper} GitHub organization has been denied. Email help@gsl.noaa.gov if you have any questions."
+    dis_html = _build_approval_html_email(
+        title="GitHub Access Request Not Approved",
+        greeting="Hello,",
+        intro_lines=[
+            f"We regret to inform you that your request to join NOAA's <strong>{lab_upper} GitHub organization</strong> has not been approved.",
+        ],
+        details_rows=[
+            ("Lab", f"NOAA's {lab_upper} GitHub organization"),
+            ("Status", "Not Approved"),
+        ],
+        action_items=[
+            'Contact <a href="mailto:help@gsl.noaa.gov" style="color:#003087;">help@gsl.noaa.gov</a> if you have any questions or wish to appeal this decision',
+        ],
+        footer_note="If you believe this decision was made in error, please contact the GSL ITS Team.",
+    )
+    send_email(user.email, "GitHub Access Request Disapproved", dis_message, html_body=dis_html)
     logging.info(f"[APPROVAL] User disapproved and notified: user_email={email}, approver_id={approver_id}")
     
     # Cancel reminder job since user has been denied
@@ -1361,21 +1610,60 @@ def send_final_confirmation_email(user_email, sponsor, lab):
     logging.info(f"[APPROVAL] Sending final confirmation emails: user_email={user_email}, sponsor={sponsor}, lab={lab}")
     stakeholders = get_stakeholders(lab, sponsor)
     logging.debug(f"[STAKEHOLDER] Stakeholders receiving final confirmation for user_email={user_email}: {stakeholders}")
-    
-    # Send access granted email with link to policy document
+    lab_upper = lab.upper()
+    onboarding_link = "https://docs.google.com/document/d/1JuoRV9g2jOnbaGsy2EXJQ_8sPcSpYNEzqUqkvgghtp8/edit?tab=t.0"
+
+    # Send access granted email to the user
     granted_message = (
-        "You have been granted an account on GitHub!\n\n"
+        f"Congratulations! You have been granted access to NOAA's {lab_upper} GitHub organization.\n\n"
         "Please review the GSL Onboarding Documents to get started:\n"
-        "https://docs.google.com/document/d/1JuoRV9g2jOnbaGsy2EXJQ_8sPcSpYNEzqUqkvgghtp8/edit?tab=t.0\n\n"
+        f"{onboarding_link}\n\n"
         "If you have any questions, contact your sponsor or the GSL ITS Team."
     )
+    granted_html = _build_approval_html_email(
+        title="GitHub Access Granted",
+        greeting="Hello,",
+        intro_lines=[
+            f"Congratulations! You have been granted access to NOAA's <strong>{lab_upper} GitHub organization</strong>.",
+            "All required approvals have been completed successfully.",
+        ],
+        details_rows=[
+            ("Your Email", user_email),
+            ("Lab", f"NOAA's {lab_upper} GitHub organization"),
+            ("Status", "&#10003; Access Granted"),
+        ],
+        action_items=[
+            f'Review the <a href="{onboarding_link}" style="color:#003087;">GSL GitHub Onboarding Documents</a> to get started',
+            "Contact your sponsor if you have any questions about your access",
+        ],
+        action_link=onboarding_link,
+        action_label="View Onboarding Documents",
+        footer_note="If you have any questions, contact your sponsor or the GSL ITS Team.",
+    )
     logging.info(f"[EMAIL] Sending access granted email to user_email={user_email}")
-    send_email(user_email, "GitHub Access Granted", granted_message)
-    
+    send_email(user_email, "GitHub Access Granted", granted_message, html_body=granted_html)
+
+    # Notify all stakeholders
     for stakeholder in stakeholders:
         logging.info(f"[EMAIL] Sending approval confirmation to stakeholder={stakeholder} for user_email={user_email}")
-        send_email(stakeholder, "User Approved", f"{user_email} has been granted an account on GitHub.")
-    
+        stakeholder_message = f"{user_email} has been granted access to NOAA's {lab_upper} GitHub organization. All approvals are complete."
+        stakeholder_html = _build_approval_html_email(
+            title="User Approved — GitHub Access Granted",
+            greeting="Hello,",
+            intro_lines=[
+                f"<strong>{user_email}</strong> has been granted access to NOAA's <strong>{lab_upper} GitHub organization</strong>.",
+                "All required approvals have been completed.",
+            ],
+            details_rows=[
+                ("Approved User", user_email),
+                ("Lab", f"NOAA's {lab_upper} GitHub organization"),
+                ("Status", "&#10003; Fully Approved"),
+            ],
+            action_items=[],
+            footer_note="This is an automated notification. No further action is required.",
+        )
+        send_email(stakeholder, "User Approved", stakeholder_message, html_body=stakeholder_html)
+
     logging.info(f"[APPROVAL] Final confirmation process completed for user_email={user_email}")
 
 #check_for_renewals()  # Initial check for renewals on launch of the server
