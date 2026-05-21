@@ -1191,12 +1191,14 @@ async def submit_agreement(
     esrl_lab: str = Form(...),
     role: str = Form(...),
     sponsor: str = Form(...),
+    github_username: str = Form(...),
     requirement1: bool = Form(...),
     requirement2: bool = Form(...),
-    requirement3: bool = Form(...)
+    requirement3: bool = Form(...),
+    requirement4: bool = Form(False)
 ):
-    logging.info(f"[APPROVAL] Received agreement submission: user_email={email}, first_name={first_name}, last_name={last_name}, lab={esrl_lab}, role={role}, sponsor={sponsor}")
-    logging.debug(f"[APPROVAL] Requirements agreed: requirement1={requirement1}, requirement2={requirement2}, requirement3={requirement3}")
+    logging.info(f"[APPROVAL] Received agreement submission: user_email={email}, first_name={first_name}, last_name={last_name}, github_username={github_username}, lab={esrl_lab}, role={role}, sponsor={sponsor}")
+    logging.debug(f"[APPROVAL] Requirements agreed: requirement1={requirement1}, requirement2={requirement2}, requirement3={requirement3}, requirement4={requirement4}")
 
     if not (requirement1 and requirement2 and requirement3):
         logging.error(f"[APPROVAL] Requirements not met for user_email={email}")
@@ -1214,6 +1216,7 @@ async def submit_agreement(
             email=email,
             first_name=first_name,
             last_name=last_name,
+            github_username=github_username.strip(),
             esrl_lab=esrl_lab,
             role=role,
             sponsor=sponsor,
@@ -1222,7 +1225,7 @@ async def submit_agreement(
         )
         session.add(user_agreement)
         session.commit()
-        logging.info(f"[APPROVAL] Agreement created in database: user_email={email}, lab={esrl_lab}, role={role}, sponsor={sponsor}")
+        logging.info(f"[APPROVAL] Agreement created in database: user_email={email}, github_username={github_username}, lab={esrl_lab}, role={role}, sponsor={sponsor}")
 
         # Attempt to send approval emails
         try:
