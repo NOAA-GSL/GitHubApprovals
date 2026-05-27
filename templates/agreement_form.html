@@ -136,7 +136,7 @@
             <div>
                 <input type="checkbox" name="requirement1" id="requirement1" required>
                 <label for="requirement1">
-                    <a href="https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k/edit?usp=share_link" target="_blank">
+                    <a id="policyLink" href="https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k" target="_blank">
                         Read and understand OAR's GitHub Usage Policy
                     </a>
                 </label>
@@ -176,6 +176,13 @@
 
         const esrlLabSelect = document.getElementById('esrl_lab');
         const sponsorSelect = document.getElementById('sponsor');
+        const policyLink = document.getElementById('policyLink');
+        const defaultPolicyUrl = 'https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k';
+        const policyLinksByLab = {
+            psl: 'https://docs.google.com/document/d/1-Aytk1fwVDZEHd8fxqHHvygfByc_jgLCWuAwdQJiCJw/',
+            gsl: 'https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k',
+            gml: 'https://docs.google.com/document/d/1VbKIXC2wxR_SwXviBmoTjfbluVRKud3oarehrrWU5j8/'
+        };
 
         const basePrefix = window.location.pathname.includes('/githubapprovals')
                 ? '/githubapprovals/'
@@ -217,9 +224,16 @@
             }
         }
 
+        function updatePolicyLink(selectedLab) {
+            policyLink.href = policyLinksByLab[selectedLab] || defaultPolicyUrl;
+        }
+
+        updatePolicyLink(esrlLabSelect.value);
+
         // Populate sponsors on lab change
         esrlLabSelect.addEventListener('change', function() {
             populateSponsors(this.value);
+            updatePolicyLink(this.value);
         });
 
         document.getElementById('agreementForm').addEventListener('submit', async function(event) {
