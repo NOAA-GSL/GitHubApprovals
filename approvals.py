@@ -128,8 +128,13 @@ def get_automation_owners():
 IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development"
 
 BASE_URL = os.getenv("BASE_URL", "https://localhost:8000")
-# Initialize FastAPI with root_path for production
-app = FastAPI(root_path=os.getenv("BASE_URL", "/")) 
+# Initialize FastAPI with root_path for production and disable auto docs endpoints
+app = FastAPI(
+    root_path=os.getenv("BASE_URL", "/"),
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+) 
 
 security = HTTPBasic() #adding security to endpoints that need it.
 
