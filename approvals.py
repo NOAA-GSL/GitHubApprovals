@@ -128,9 +128,11 @@ def get_automation_owners():
 IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development"
 
 BASE_URL = os.getenv("BASE_URL", "https://localhost:8000")
+# Path prefix where the app is mounted (e.g. /githubapprovals/ or /)
+BASE_PATH = os.getenv("BASE_PATH", "/" if IS_DEVELOPMENT else "/githubapprovals/")
 # Initialize FastAPI with root_path for production and disable auto docs endpoints
 app = FastAPI(
-    root_path=os.getenv("BASE_URL", "/"),
+    root_path=BASE_PATH.rstrip("/") if BASE_PATH != "/" else "",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
@@ -142,6 +144,9 @@ security = HTTPBasic() #adding security to endpoints that need it.
 origins = [
     "https://apps-dev.gsd.esrl.noaa.gov/githubapprovals/",
     "https://apps-prod.gsd.esrl.noaa.gov/githubapprovals/",
+    "https://gsl.noaa.gov/githubapprovals",
+    "http://gsl.noaa.gov/githubapprovals",
+    "https://githubapprovals.gsl.noaa.gov",
     "http://localhost:8000/",
 ]
 
@@ -155,8 +160,7 @@ app.add_middleware(
 )
 
 # Set database URL based on environment
-#DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
-if "githubapprovals" not in BASE_URL:
+if IS_DEVELOPMENT:
     DATABASE_URL = "sqlite:///./agreement.db"  # Local development database
 else:
     DATABASE_URL = "sqlite:////data/agreement.db"  # Production database path
@@ -1169,10 +1173,7 @@ async def api_progress_status(email: str, request: Request):
     return resp
 
 def get_base_path() -> str:
-    if "githubapprovals" not in BASE_URL:
-        return "/"
-    else:
-        return "/githubapprovals/"
+    return BASE_PATH
 
 @app.get("/progress/{email}", response_class=HTMLResponse)
 async def progress_page(email: str, request: Request):
@@ -1459,7 +1460,7 @@ def download_agreements():
 # new endpoint to get the list of labs and their sponsors
 @app.get("/api/lab_sponsors")
 async def get_lab_sponsors():
-    if "githubapprovals" not in BASE_URL:
+    if IS_DEVELOPMENT:
         csv_path = "lab_sponsors.csv"  # local dev / test
     else:
         csv_path = "/data/lab_sponsors.csv"  # production volume
