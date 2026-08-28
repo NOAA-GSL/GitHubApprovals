@@ -104,9 +104,11 @@
             {% endfor %}
         </tbody>
     </table>
-    <button onclick="window.location.href='{{ base_path }}download-agreements/'">Download Spreadsheet</button>
+    <button onclick="window.location.href=basePrefix+'download-agreements/'">Download Spreadsheet</button>
 
  <script>
+    const basePrefix = window.location.pathname.includes('/githubapprovals') ? '/githubapprovals/' : '/';
+
     async function saveAgreement(email) {
         const newFirstName = document.getElementById(`first_name_${email}`).value;
         const newLastName = document.getElementById(`last_name_${email}`).value;
@@ -118,7 +120,7 @@
         const newAgreed = document.getElementById(`agreed_${email}`).checked;
         const newLastRenewalDate = document.getElementById(`last_renewal_date_${email}`).value;
 
-        const response = await fetch(`{{ base_path }}api/agreements/${email}`, {
+        const response = await fetch(`${basePrefix}api/agreements/${email}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -146,7 +148,7 @@
     async function deleteAgreement(email) {
         if (!confirm('Are you sure you want to delete this agreement?')) return;
 
-        const response = await fetch(`{{ base_path }}api/agreements/${email}`, {
+        const response = await fetch(`${basePrefix}api/agreements/${email}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'
