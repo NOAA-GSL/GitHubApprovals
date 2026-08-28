@@ -1290,30 +1290,53 @@ async def approve_user(request: Request, email: str, approver_id: int, token: st
     
     logging.info(f"[APPROVAL] Token validated successfully for user_email={email}, approver_id={approver_id}")
 
+    # Check if this specific approver has already approved (prevents duplicate emails on repeated clicks)
+    already_approved = False
+    if approver_id == 1 and user.sponsorid:
+        already_approved = True
+        logging.info(f"[APPROVAL] Sponsor has already approved: user_email={email}, sponsor={user.sponsorid}")
+    elif approver_id == 2 and user.systemowner:
+        already_approved = True
+        logging.info(f"[APPROVAL] System Owner has already approved: user_email={email}")
+    elif approver_id == 3 and user.accountadmin:
+        already_approved = True
+        logging.info(f"[APPROVAL] Account Admin has already approved: user_email={email}")
+    elif approver_id == 4 and user.isso:
+        already_approved = True
+        logging.info(f"[APPROVAL] ISSO has already approved: user_email={email}")
+
     if approver_id == 1:
-        user.sponsorid = stakeholders[3] 
-        user.approval_timestamp1 = datetime.utcnow()
-        user.approver_email1 = stakeholders[3]
-        logging.info(f"[APPROVAL] Sponsor approved: user_email={email}, sponsor={stakeholders[3]}, timestamp={user.approval_timestamp1.isoformat()}")
-        session.commit()
-        # Send approval emails to other stakeholders after sponsor approves
-        logging.info(f"[APPROVAL] Triggering stakeholder notifications for user_email={email}")
-        send_stakeholder_approval_emails(email)
+        if not already_approved:
+            user.sponsorid = stakeholders[3] 
+            user.approval_timestamp1 = datetime.utcnow()
+            user.approver_email1 = stakeholders[3]
+            logging.info(f"[APPROVAL] Sponsor approved: user_email={email}, sponsor={stakeholders[3]}, timestamp={user.approval_timestamp1.isoformat()}")
+            session.commit()
+            # Send approval emails to other stakeholders after sponsor approves
+            logging.info(f"[APPROVAL] Triggering stakeholder notifications for user_email={email}")
+            send_stakeholder_approval_emails(email)
     elif approver_id == 2:
-        user.systemowner = stakeholders[0] 
-        user.approval_timestamp2 = datetime.utcnow()
-        user.approver_email2 = stakeholders[0]
-        logging.info(f"[APPROVAL] System Owner approved: user_email={email}, approver={stakeholders[0]}, timestamp={user.approval_timestamp2.isoformat()}")
+        if not already_approved:
+            user.systemowner = stakeholders[0] 
+            user.approval_timestamp2 = datetime.utcnow()
+            user.approver_email2 = stakeholders[0]
+            logging.info(f"[APPROVAL] System Owner approved: user_email={email}, approver={stakeholders[0]}, timestamp={user.approval_timestamp2.isoformat()}")
     elif approver_id == 3:
-        user.accountadmin = stakeholders[1] 
-        user.approval_timestamp3 = datetime.utcnow()
-        user.approver_email3 = stakeholders[1]
-        logging.info(f"[APPROVAL] Account Admin approved: user_email={email}, approver={stakeholders[1]}, timestamp={user.approval_timestamp3.isoformat()}")
+        if not already_approved:
+            user.accountadmin = stakeholders[1] 
+            user.approval_timestamp3 = datetime.utcnow()
+            user.approver_email3 = stakeholders[1]
+            logging.info(f"[APPROVAL] Account Admin approved: user_email={email}, approver={stakeholders[1]}, timestamp={user.approval_timestamp3.isoformat()}")
     elif approver_id == 4:
-        user.isso = stakeholders[2] 
-        user.approval_timestamp4 = datetime.utcnow()
-        user.approver_email4 = stakeholders[2]
-        logging.info(f"[APPROVAL] ISSO approved: user_email={email}, approver={stakeholders[2]}, timestamp={user.approval_timestamp4.isoformat()}")
+        if not already_approved:
+            user.isso = stakeholders[2] 
+            user.approval_timestamp4 = datetime.utcnow()
+            user.approver_email4 = stakeholders[2]
+            logging.info(f"[APPROVAL] ISSO approved: user_email={email}, approver={stakeholders[2]}, timestamp={user.approval_timestamp4.isoformat()}")
+
+    if already_approved:
+        session.close()
+        return templates.TemplateResponse("confirmation.html", {"request": request, "user_email": email})
 
     session.commit()
 
