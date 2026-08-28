@@ -125,7 +125,8 @@ def get_automation_owners():
     return owners
 
 # Check if we're in development or production mode
-IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() == "development"
+# treat anything other than explicit "production" as non-production
+IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() != "production"
 
 BASE_URL = os.getenv("BASE_URL", "https://localhost:8000")
 # Path prefix where the app is mounted (e.g. /githubapprovals/ or /)
