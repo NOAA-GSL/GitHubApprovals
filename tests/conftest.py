@@ -119,6 +119,7 @@ def sample_user_data():
         "email": "test.user@noaa.gov",
         "first_name": "Test",
         "last_name": "User",
+        "github_username": "testuser-noaa",
         "esrl_lab": "PSD",
         "role": "Scientist",
         "sponsor": "sponsor@noaa.gov",
