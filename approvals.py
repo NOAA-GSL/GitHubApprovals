@@ -932,7 +932,7 @@ async def browse_agreements(request: Request):
         agreements = session.query(UserAgreement).all()
         logging.info(f"Found {len(agreements)} agreements in the database")
         #print(f"Found {len(agreements)} agreements in the database")
-        return templates.TemplateResponse("browse_agreements.html", {"request": request, "agreements": agreements})
+        return templates.TemplateResponse("browse_agreements.html", {"request": request, "agreements": agreements, "base_path": get_base_path()})
     except Exception as e:
         logging.error(f"Error in browse_agreements: {str(e)}")
         #print(f"Error in browse_agreements: {str(e)}")
