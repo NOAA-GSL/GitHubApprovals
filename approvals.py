@@ -128,7 +128,7 @@ def get_automation_owners():
 # treat anything other than explicit "production" as non-production
 IS_DEVELOPMENT = os.getenv("ENVIRONMENT", "development").lower() != "production"
 
-BASE_URL = os.getenv("BASE_URL", "https://localhost:8000")
+BASE_URL = os.getenv("BASE_URL", "https://localhost:8000").rstrip("/")
 # Path prefix where the app is mounted (e.g. /githubapprovals/ or /)
 BASE_PATH = os.getenv("BASE_PATH", "/" if IS_DEVELOPMENT else "/githubapprovals/")
 # Initialize FastAPI with root_path for production and disable auto docs endpoints
@@ -193,6 +193,7 @@ class UserAgreement(Base):
     github_username = Column(String, nullable=True, index=True)
     information_owner = Column(Boolean, default=False, index=True)
     welcome_email_sent = Column(Boolean, default=False)
+    copilot_license = Column(Boolean, default=False)
     info_owner_date_added = Column(DateTime, nullable=True)
     esrl_lab = Column(String, nullable=False)
     role = Column(String, nullable=False)
@@ -267,8 +268,47 @@ def migrate_add_last_reminder_sent_column():
         logging.error(f"[MIGRATION] Error adding last_reminder_sent column: {str(e)}")
         raise
 
+def migrate_add_copilot_license_column():
+    """Add copilot_license column to existing database if it doesn't exist.
+
+    This migration is idempotent and safe to run multiple times.
+    """
+
+    # Determine database path
+    if IS_DEVELOPMENT:
+        db_path = "./agreement.db"
+    else:
+        db_path = "/data/agreement.db"
+
+    # Check if database file exists
+    if not os.path.exists(db_path):
+        logging.info("[MIGRATION] Database not found, will be created by SQLAlchemy")
+        return
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Check if column already exists
+        cursor.execute("PRAGMA table_info(user_agreements)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        if "copilot_license" not in columns:
+            logging.info("[MIGRATION] Adding copilot_license column to user_agreements table")
+            cursor.execute("ALTER TABLE user_agreements ADD COLUMN copilot_license BOOLEAN DEFAULT 0")
+            conn.commit()
+            logging.info("[MIGRATION] Successfully added copilot_license column")
+        else:
+            logging.info("[MIGRATION] copilot_license column already exists, skipping")
+
+        conn.close()
+    except Exception as e:
+        logging.error(f"[MIGRATION] Error adding copilot_license column: {str(e)}")
+        raise
+
 # Run migration immediately after schema creation
 migrate_add_last_reminder_sent_column()
+migrate_add_copilot_license_column()
 
 scheduler = BackgroundScheduler()
 scheduler.start()
@@ -990,6 +1030,7 @@ class UpdateAgreementRequest(BaseModel):
     github_username: Optional[str] = None
     information_owner: Optional[bool] = False
     welcome_email_sent: Optional[bool] = False
+    copilot_license: Optional[bool] = False
 
 @app.put("/api/agreements/{email}")
 async def update_agreement(
@@ -1017,6 +1058,7 @@ async def update_agreement(
     user_agreement.github_username = request.github_username
     user_agreement.information_owner = request.information_owner
     user_agreement.welcome_email_sent = request.welcome_email_sent
+    user_agreement.copilot_license = request.copilot_license
     session.commit()
     return {"message": "Agreement updated successfully"}
 
@@ -1199,12 +1241,14 @@ async def submit_agreement(
     role: str = Form(...),
     sponsor: str = Form(...),
     github_username: str = Form(...),
+    copilot_license: str = Form("No"),
     requirement1: bool = Form(...),
     requirement2: bool = Form(...),
     requirement3: bool = Form(...),
     requirement4: bool = Form(False)
 ):
-    logging.info(f"[APPROVAL] Received agreement submission: user_email={email}, first_name={first_name}, last_name={last_name}, github_username={github_username}, lab={esrl_lab}, role={role}, sponsor={sponsor}")
+    copilot_license_bool = copilot_license.strip().lower() == "yes"
+    logging.info(f"[APPROVAL] Received agreement submission: user_email={email}, first_name={first_name}, last_name={last_name}, github_username={github_username}, lab={esrl_lab}, role={role}, sponsor={sponsor}, copilot_license={copilot_license_bool}")
     logging.debug(f"[APPROVAL] Requirements agreed: requirement1={requirement1}, requirement2={requirement2}, requirement3={requirement3}, requirement4={requirement4}")
 
     if not (requirement1 and requirement2 and requirement3):
@@ -1227,6 +1271,7 @@ async def submit_agreement(
             esrl_lab=esrl_lab,
             role=role,
             sponsor=sponsor,
+            copilot_license=copilot_license_bool,
             agreed=True,
             last_renewal_date=datetime.utcnow() # Set the last renewal date to now
         )
