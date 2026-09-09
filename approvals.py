@@ -168,7 +168,7 @@ else:
 
 logging.info(f"Using database URL: {DATABASE_URL}")
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -1607,7 +1607,7 @@ async def renew_agreement(request: Request, email: str, token: str = None):
 from dotenv import dotenv_values
 
 @app.delete("/api/agreements/{email}")
-async def delete_agreement(email: str, credentials: HTTPBasicCredentials = Depends(security)):
+def delete_agreement(email: str, credentials: HTTPBasicCredentials = Depends(security)):
     # Use already loaded environment variables
     if not GITHUB_TOKEN:
         raise HTTPException(status_code=403, detail="GITHUB_TOKEN missing in environment.")
