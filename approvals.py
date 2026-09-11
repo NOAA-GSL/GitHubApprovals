@@ -209,6 +209,29 @@ def get_github_org_license_usage(org: str = ORG_NAME) -> Optional[tuple]:
         return None
     return total_seats, filled_seats
 
+
+def get_github_org_member_count(org: str = ORG_NAME) -> Optional[int]:
+    """Return the org's member count (matches the 'Members' badge on the org's GitHub page), or None if unavailable."""
+    if not GITHUB_TOKEN:
+        logging.error("[LICENSE] GITHUB_TOKEN missing; cannot retrieve member count from GitHub.")
+        return None
+    url = f"https://api.github.com/orgs/{org}/members"
+    total = 0
+    page = 1
+    try:
+        while True:
+            response = requests.get(url, headers=HEADERS, params={"per_page": 100, "page": page}, timeout=15)
+            response.raise_for_status()
+            members = response.json()
+            if not members:
+                break
+            total += len(members)
+            page += 1
+    except requests.RequestException as e:
+        logging.error(f"[LICENSE] Failed to query GitHub org members for org={org}: {str(e)}")
+        return None
+    return total
+
 # Database models
 class UserAgreement(Base):
     __tablename__ = "user_agreements"
@@ -724,6 +747,15 @@ def send_stakeholder_approval_emails(user_email):
         license_line = ""
         license_rows = []
         logging.warning("[STAKEHOLDER] GitHub license usage unavailable; omitting license info from stakeholder emails")
+
+    # Org member count (matches the "Members" badge on the GitHub org page); degrade gracefully if unavailable
+    member_count = get_github_org_member_count()
+    if member_count is not None:
+        license_line += f"{ORG_NAME} currently has {member_count} members.\n\n"
+        license_rows.append((f"{ORG_NAME} Members", str(member_count)))
+        logging.debug(f"[STAKEHOLDER] Org member count from GitHub: org={ORG_NAME}, members={member_count}")
+    else:
+        logging.warning("[STAKEHOLDER] GitHub org member count unavailable; omitting from stakeholder emails")
 
     stakeholder_roles = ["System Owner", "Account Admin", "ISSO"]
     for idx, (stakeholder, token, role) in enumerate(zip(stakeholders[0:3], tokens, stakeholder_roles), start=2):
