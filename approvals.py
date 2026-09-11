@@ -68,6 +68,7 @@ import threading
 import time
 from verification_progress_gif import create_progress_gif
 import sqlite3
+import requests
 
 # Configure logging with file handler and structured format
 logging.basicConfig(
@@ -181,7 +182,32 @@ app.mount("/images", StaticFiles(directory="images"), name="images")
 ORG_NAME = "NOAA-GSL"  # Replace with your organization name
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # get token so you can use API
 HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}"}
-TOTAL_LICENSES = 97  # Replace with your organization's total  -static value for now
+
+def _is_flag_set(value) -> bool:
+    """Treat None, empty string, numeric 0, and string '0' as NOT set."""
+    return value not in (None, "", 0, "0")
+
+
+def get_github_org_license_usage(org: str = ORG_NAME) -> Optional[tuple]:
+    """Return (total_seats, filled_seats) from GitHub, or None if unavailable (bad token scope, network issue, etc.)."""
+    if not GITHUB_TOKEN:
+        logging.error("[LICENSE] GITHUB_TOKEN missing; cannot retrieve license usage from GitHub.")
+        return None
+    url = f"https://api.github.com/orgs/{org}"
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        logging.error(f"[LICENSE] Failed to query GitHub org info for org={org}: {str(e)}")
+        return None
+
+    plan = response.json().get("plan") or {}
+    total_seats = plan.get("seats")
+    filled_seats = plan.get("filled_seats")
+    if total_seats is None or filled_seats is None:
+        logging.error(f"[LICENSE] GitHub org response missing seat data for org={org}: plan={plan}")
+        return None
+    return total_seats, filled_seats
 
 # Database models
 class UserAgreement(Base):
@@ -686,10 +712,18 @@ def send_stakeholder_approval_emails(user_email):
     lab = user.esrl_lab.upper()
     logging.info(f"[STAKEHOLDER] Sponsor info: sponsor_name={sponsor_name}, sponsor_email={user.sponsor}, lab={lab}")
 
-    # Get the number of active licenses from the database
-    rowsindatabase = session.query(UserAgreement).count()
-    available_licenses = 106 - rowsindatabase
-    logging.debug(f"[STAKEHOLDER] License info: active_licenses={rowsindatabase}, available_licenses={available_licenses}")
+    # Pull license usage directly from GitHub so stakeholder emails match GitHub's own numbers; degrade gracefully if unavailable
+    license_usage = get_github_org_license_usage()
+    if license_usage:
+        total_seats, filled_seats = license_usage
+        available_licenses = total_seats - filled_seats
+        license_line = f"We currently have {filled_seats} active licenses with {available_licenses} licenses available for new members.\n\n"
+        license_rows = [("Active Licenses", f"{filled_seats} in use, {available_licenses} available")]
+        logging.debug(f"[STAKEHOLDER] License info from GitHub: filled={filled_seats}, total={total_seats}, available={available_licenses}")
+    else:
+        license_line = ""
+        license_rows = []
+        logging.warning("[STAKEHOLDER] GitHub license usage unavailable; omitting license info from stakeholder emails")
 
     stakeholder_roles = ["System Owner", "Account Admin", "ISSO"]
     for idx, (stakeholder, token, role) in enumerate(zip(stakeholders[0:3], tokens, stakeholder_roles), start=2):
@@ -703,9 +737,7 @@ NOTE: You must be on the wired network at NOAA or VPNed in to access the links b
 
 {sponsor_name} has sponsored {user_email} to join NOAA's {lab} GitHub organization.
 
-We currently have {rowsindatabase} active licenses with {available_licenses} licenses available for new members.
-
-Do you approve or refuse {user_email}'s request to join NOAA's {lab} GitHub organization?:
+{license_line}Do you approve or refuse {user_email}'s request to join NOAA's {lab} GitHub organization?:
 - Approve:
 {approval_link}
 
@@ -730,7 +762,7 @@ Your Approval Team"""
                 ("Lab", f"NOAA's {lab} GitHub organization"),
                 ("Sponsor", sponsor_name),
                 ("Your Role", role),
-                ("Active Licenses", f"{rowsindatabase} in use, {available_licenses} available"),
+                *license_rows,
             ],
             action_items=[
                 "Review the request details above",
@@ -1085,10 +1117,6 @@ def build_status_from_agreement(user_agreement: UserAgreement) -> dict:
         ("accountadmin", user_agreement.accountadmin,  user_agreement.disaccountadmin, user_agreement.approval_timestamp3),
         ("isso",         user_agreement.isso,          user_agreement.disisso,         user_agreement.approval_timestamp4),
     ]
-
-    def _is_flag_set(value) -> bool:
-        """Treat None, empty string, numeric 0, and string '0' as NOT set."""
-        return value not in (None, "", 0, "0")
 
     status_dict: dict[str, dict] = {}
     for idx, (role, approved_value, disapproved_value, stamp) in enumerate(stages, start=1):
