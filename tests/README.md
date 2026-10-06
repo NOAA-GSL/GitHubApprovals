@@ -55,8 +55,8 @@ docker run --rm \
   -e ENVIRONMENT=test \
   -e BASE_URL=http://testserver \
   -e GITHUB_TOKEN=test_token \
-  -e EMAIL_ADDRESS=test@example.com \
-  -e EMAIL_PASSWORD=test_password \
+  -e ADMIN_USERNAME=test-admin \
+  -e ADMIN_PASSWORD=test_admin_password \
   -e STAKEHOLDERS_PSD=test1@noaa.gov,test2@noaa.gov,test3@noaa.gov \
   -e STAKEHOLDERS_GSD=test1@noaa.gov,test2@noaa.gov,test3@noaa.gov \
   -v $(pwd):/workspace \
@@ -93,8 +93,8 @@ docker run --rm \
   -e ENVIRONMENT=test \
   -e BASE_URL=http://testserver \
   -e GITHUB_TOKEN=test_token \
-  -e EMAIL_ADDRESS=test@example.com \
-  -e EMAIL_PASSWORD=test_password \
+  -e ADMIN_USERNAME=test-admin \
+  -e ADMIN_PASSWORD=test_admin_password \
   -e STAKEHOLDERS_PSD=test1@noaa.gov,test2@noaa.gov,test3@noaa.gov \
   -v $(pwd):/workspace \
   -w /workspace \

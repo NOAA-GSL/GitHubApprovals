@@ -15,8 +15,8 @@ docker run --rm \
   -e ENVIRONMENT=test \
   -e BASE_URL=http://testserver \
   -e GITHUB_TOKEN=test_token \
-  -e EMAIL_ADDRESS=test@example.com \
-  -e EMAIL_PASSWORD=test_password \
+  -e ADMIN_USERNAME=test-admin \
+  -e ADMIN_PASSWORD=test_admin_password \
   -e STAKEHOLDERS_PSD=test1@noaa.gov,test2@noaa.gov,test3@noaa.gov \
   -e STAKEHOLDERS_GSD=test1@noaa.gov,test2@noaa.gov,test3@noaa.gov \
   -e STAKEHOLDERS_ESRL=test1@noaa.gov,test2@noaa.gov,test3@noaa.gov \
@@ -30,8 +30,8 @@ docker run --rm \
   -e ENVIRONMENT=test \
   -e BASE_URL=http://testserver \
   -e GITHUB_TOKEN=test_token \
-  -e EMAIL_ADDRESS=test@example.com \
-  -e EMAIL_PASSWORD=test_password \
+  -e ADMIN_USERNAME=test-admin \
+  -e ADMIN_PASSWORD=test_admin_password \
   -e STAKEHOLDERS_PSD=test1@noaa.gov,test2@noaa.gov,test3@noaa.gov \
   -e STAKEHOLDERS_GSD=test1@noaa.gov,test2@noaa.gov,test3@noaa.gov \
   -v $(pwd):/workspace \
@@ -82,8 +82,11 @@ docker run --rm github-approvals:local python3 -c "import pytest; import respons
 docker run -d --name test-approvals \
   -e ENVIRONMENT=development \
   -e GITHUB_TOKEN=your_token \
-  -e EMAIL_ADDRESS=your_email \
-  -e EMAIL_PASSWORD=your_password \
+  -e ADMIN_USERNAME=your_admin_username \
+  -e ADMIN_PASSWORD=your_admin_password \
+  -e SMTP_RELAY_HOST=smtp-gw1.gsd.esrl.noaa.gov \
+  -e SMTP_RELAY_PORT=25 \
+  -e MAIL_FROM=github.gsl@noaa.gov \
   -p 8000:8000 \
   github-approvals:local
 
@@ -238,8 +241,11 @@ GitHubApprovals/
 ENVIRONMENT=test
 BASE_URL=http://testserver
 GITHUB_TOKEN=test_token
-EMAIL_ADDRESS=test@example.com
-EMAIL_PASSWORD=test_password
+ADMIN_USERNAME=test-admin
+ADMIN_PASSWORD=test_admin_password
+SMTP_RELAY_HOST=smtp-gw1.gsd.esrl.noaa.gov
+SMTP_RELAY_PORT=25
+MAIL_FROM=github.gsl@noaa.gov
 STAKEHOLDERS_PSD=email1,email2,email3
 STAKEHOLDERS_GSD=email1,email2,email3
 ```
@@ -249,8 +255,11 @@ STAKEHOLDERS_GSD=email1,email2,email3
 ENVIRONMENT=production
 BASE_URL=https://your-domain.com
 GITHUB_TOKEN=<real_github_token>
-EMAIL_ADDRESS=<real_email>
-EMAIL_PASSWORD=<real_app_password>
+ADMIN_USERNAME=<admin_username>
+ADMIN_PASSWORD=<admin_password>
+SMTP_RELAY_HOST=smtp-gw1.gsd.esrl.noaa.gov
+SMTP_RELAY_PORT=25
+MAIL_FROM=github.gsl@noaa.gov
 STAKEHOLDERS_<LAB>=<comma_separated_emails>
 ```
 

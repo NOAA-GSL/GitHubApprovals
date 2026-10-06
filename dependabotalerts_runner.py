@@ -3,7 +3,9 @@
 Uses APScheduler to invoke the standalone notification script logic at a fixed interval.
 Environment variables:
   RUN_INTERVAL_MINUTES (default 720 = 12 hours)
-  GITHUB_TOKEN, EMAIL_ADDRESS, EMAIL_PASSWORD (required for underlying script)
+    GITHUB_TOKEN (required for the underlying script)
+    SMTP_RELAY_HOST (default smtp-gw1.gsd.esrl.noaa.gov)
+    SMTP_RELAY_PORT (default 25), MAIL_FROM (default github.gsl@noaa.gov)
 
 This runner imports the main() function from dependabotalerts and executes it.
 All exceptions are caught per run to avoid scheduler death.

@@ -18,7 +18,7 @@ Dependencies:
 Configuration:
 - The API uses environment variables to manage sensitive information like database URLs and email credentials.
 - The database is set up using SQLAlchemy with a SQLite backend.
-- Email notifications are sent using Gmail's SMTP server with SSL.
+- Email notifications are sent through the internal SMTP relay.
 
 Endpoints:
 - GET /: Displays the agreement form.
@@ -53,11 +53,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 import uvicorn
 import uuid
-import smtplib
 import os
-import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from smtp_relay import send_via_relay
 from dotenv import load_dotenv
 from datetime import datetime
 import logging
@@ -482,15 +481,7 @@ def recover_pending_approval_reminders():
 
 def send_email(recipient, subject, message, html_body=None):
     logging.debug(f"[EMAIL] Preparing to send email: recipient={recipient}, subject={subject}, from=github.gsl@noaa.gov")
-    sender_email = os.getenv("EMAIL_ADDRESS")
-    password = os.getenv("EMAIL_PASSWORD")
-
-    if not sender_email or not password:
-        logging.error(f"[EMAIL] Email configuration missing for recipient={recipient}")
-        raise HTTPException(status_code=500, detail="Email configuration is missing")
-    
-    #specify the alternative "from" email address
-    from_email = "github.gsl@noaa.gov" #Alaternative email address authorized in Gmail account
+    from_email = os.getenv("MAIL_FROM", "github.gsl@noaa.gov")
 
     msg = MIMEMultipart("alternative")
     msg["From"] = from_email
@@ -506,16 +497,9 @@ def send_email(recipient, subject, message, html_body=None):
         html_part = MIMEText(html_body, "html")
         msg.attach(html_part)
 
-    context = ssl.create_default_context()
-
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context, timeout=30) as server:
-            server.login(sender_email, password)
-            server.sendmail(sender_email, recipient, msg.as_string())
-            logging.info(f"[EMAIL] Successfully sent email: recipient={recipient}, subject={subject}, timestamp={datetime.utcnow().isoformat()}")    
-    except smtplib.SMTPAuthenticationError as e:
-        logging.error(f"[EMAIL] SMTP authentication error for recipient={recipient}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to send email due to authentication error. Please check your email credentials.")
+        send_via_relay(msg)
+        logging.info(f"[EMAIL] Successfully sent email: recipient={recipient}, subject={subject}, timestamp={datetime.utcnow().isoformat()}")
     except Exception as e:
         logging.error(f"[EMAIL] Failed to send email to recipient={recipient}, subject={subject}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
@@ -1730,8 +1714,8 @@ def delete_agreement(email: str, credentials: HTTPBasicCredentials = Depends(sec
     return {"message": "User agreement deleted successfully"}
 
 def authenticate_user(credentials: HTTPBasicCredentials):
-    correct_username = os.getenv("EMAIL_ADDRESS")
-    correct_password = os.getenv("EMAIL_PASSWORD")
+    correct_username = os.getenv("ADMIN_USERNAME")
+    correct_password = os.getenv("ADMIN_PASSWORD")
     if not correct_username or not correct_password:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

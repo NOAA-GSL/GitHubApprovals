@@ -124,7 +124,7 @@ class UserAgreement(Base):
 - `GET /api/progress/{email}/status`: Checks the status of GIF generation for a user.
 
 **Email Notifications:**
-Emails are sent using the `smtplib` library. The `send_email` function handles the email sending process for approvals, reminders, and confirmations.
+Approval and Dependabot notifications use the internal SMTP relay through `smtplib`, with no SMTP login or TLS. Configure `SMTP_RELAY_HOST` (default `smtp-gw1.gsd.esrl.noaa.gov`), `SMTP_RELAY_PORT` (default `25`), and optionally `MAIL_FROM` (default `github.gsl@noaa.gov`).
 
 ### Background Tasks
 The application uses APScheduler to schedule reminder emails for pending approvals and to check for users who need to renew their agreements. Renewal reminders are sent automatically every three days.
@@ -261,9 +261,8 @@ This section is intended to help new developers support and maintain the GitHub 
 
 ### 1. Environment & Configuration Issues
 
-- **.env File Missing or Misconfigured**: Ensure the `.env` file exists in the project root and contains valid values for `GITHUB_TOKEN`, `EMAIL_ADDRESS`, and `EMAIL_PASSWORD`. Never commit `.env` to version control.
-- **Environment Variables Not Loaded**: If you see errors about missing tokens or email credentials, check that `load_dotenv()` is called before accessing environment variables.
-- **App Passwords for Gmail**: If using Gmail, set up an App Password for `EMAIL_PASSWORD` rather than your main account password for better security and reliability.
+- **Environment Configuration Missing**: Production loads settings from `/data/.env`; ensure it contains `GITHUB_TOKEN`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and required stakeholder settings. Never commit `.env` or real credentials to version control.
+- **Environment Variables Not Loaded**: The application loads `/data/.env`; the Dependabot notifier loads `/data/.env` when present, otherwise a project-root `.env`, then reads process environment variables.
 
 ### 2. GitHub API Issues
 
@@ -273,7 +272,7 @@ This section is intended to help new developers support and maintain the GitHub 
 
 ### 3. Email Sending Issues
 
-- **Authentication Errors**: If emails fail to send, check that `EMAIL_ADDRESS` and `EMAIL_PASSWORD` are correct and that the sender is authorized. For Gmail, ensure the account allows SMTP and less secure app access if needed.
+- **Email Not Sending**: Check pod egress to `SMTP_RELAY_HOST:SMTP_RELAY_PORT`, relay acceptance, the recipient address, and `MAIL_FROM` authorization. The relay connection uses plain SMTP without authentication or TLS.
 - **Spam/Rate Limits**: Sending many emails quickly may trigger spam filters or rate limits. Space out notifications and monitor for bounce-backs.
 - **Unverified Recipients**: Emails are sent to addresses from the CSV file. If emails bounce, verify the CSV data and confirm addresses with stakeholders.
 
@@ -293,7 +292,7 @@ This section is intended to help new developers support and maintain the GitHub 
 | Problem | Likely Cause | How to Fix |
 |---------|--------------|------------|
 | Missing GITHUB_TOKEN | .env not loaded or token missing | Add token to .env, call load_dotenv() |
-| Email not sending | Wrong credentials, SMTP blocked | Check .env, use App Password, verify SMTP settings |
+| Email not sending | Relay unreachable or sender/recipient rejected | Check relay host/port, pod network access, sender, and relay response |
 | API request fails | Invalid token, rate limit | Check token, handle rate limits, check permissions |
 | CSV not found | Wrong path or missing file | Verify file location and format |
 | Emails bounce | Invalid addresses in CSV | Update CSV, verify with users |
@@ -311,7 +310,7 @@ This section is intended to help new developers support and maintain the GitHub 
 ### 8. Getting Help
 
 - For issues with the GitHub API, consult the [GitHub REST API documentation](https://docs.github.com/en/rest).
-- For email issues, refer to your email provider's SMTP documentation (e.g., Gmail SMTP).
+- For email issues, check internal relay availability and network policy with the platform team.
 - For Python errors, check the traceback and review recent code changes.
 - Reach out to previous maintainers or the DevOps team for historical context or access issues.
 

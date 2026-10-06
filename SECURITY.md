@@ -1,5 +1,9 @@
 # Security Policy
 
+## Runtime Secrets and Email
+
+Production configuration is loaded from `/data/.env`. Keep `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `GITHUB_TOKEN` secret, restrict access to the mounted data volume, and never commit real values. Email uses the internal SMTP relay on port 25 without SMTP authentication or TLS; restrict relay access to trusted workloads and networks. `MAIL_FROM` defaults to `github.gsl@noaa.gov`.
+
 ## Supported Versions
 
 Use this section to tell people about which versions of your project are

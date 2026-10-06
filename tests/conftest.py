@@ -17,8 +17,8 @@ import responses
 os.environ["ENVIRONMENT"] = "test"
 os.environ["BASE_URL"] = "http://testserver"
 os.environ["GITHUB_TOKEN"] = "test_github_token_12345"
-os.environ["EMAIL_ADDRESS"] = "test@example.com"
-os.environ["EMAIL_PASSWORD"] = "test_password"
+os.environ["ADMIN_USERNAME"] = "test-admin"
+os.environ["ADMIN_PASSWORD"] = "test_admin_password"
 os.environ["STAKEHOLDERS_PSD"] = "stakeholder1@noaa.gov,stakeholder2@noaa.gov,stakeholder3@noaa.gov"
 os.environ["STAKEHOLDERS_GSD"] = "stakeholder1@noaa.gov,stakeholder2@noaa.gov,stakeholder3@noaa.gov"
 os.environ["STAKEHOLDERS_ESRL"] = "stakeholder1@noaa.gov,stakeholder2@noaa.gov,stakeholder3@noaa.gov"
@@ -94,7 +94,7 @@ def mock_smtp():
     """
     Mock SMTP server for email testing.
     """
-    with patch('smtplib.SMTP_SSL') as mock_smtp_class:
+    with patch('smtplib.SMTP') as mock_smtp_class:
         mock_smtp_instance = Mock()
         mock_smtp_class.return_value.__enter__.return_value = mock_smtp_instance
         yield mock_smtp_instance
@@ -181,8 +181,8 @@ def authenticated_headers():
     Uses credentials from environment variables.
     """
     # Use the same credentials set in environment
-    username = "test@example.com"  # EMAIL_ADDRESS from env
-    password = "test_password"      # EMAIL_PASSWORD from env
+    username = "test-admin"  # ADMIN_USERNAME from env
+    password = "test_admin_password"  # ADMIN_PASSWORD from env
     import base64
     credentials = base64.b64encode(f"{username}:{password}".encode("ascii")).decode("ascii")
     return {"Authorization": f"Basic {credentials}"}
@@ -194,7 +194,7 @@ def auth_credentials():
     Tuple of (username, password) for authenticated requests.
     Use with client.get(..., auth=auth_credentials)
     """
-    return ("test@example.com", "test_password")
+    return ("test-admin", "test_admin_password")
 
 
 @pytest.fixture

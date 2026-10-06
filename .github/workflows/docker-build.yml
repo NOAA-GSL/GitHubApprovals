@@ -116,8 +116,8 @@ jobs:
             -e ENVIRONMENT=test \
             -e BASE_URL=http://testserver \
             -e GITHUB_TOKEN=dummy_test_token_for_testing \
-            -e EMAIL_ADDRESS=test@example.com \
-            -e EMAIL_PASSWORD=dummy_test_password \
+            -e ADMIN_USERNAME=test-admin \
+            -e ADMIN_PASSWORD=dummy_test_password \
             -e STAKEHOLDERS_PSD=test1@noaa.gov,test2@noaa.gov \
             -e STAKEHOLDERS_GSD=test1@noaa.gov,test2@noaa.gov \
             -e STAKEHOLDERS_ESRL=test1@noaa.gov,test2@noaa.gov \
@@ -173,8 +173,8 @@ jobs:
           docker run -d --name test-container \
             -e ENVIRONMENT=test \
             -e GITHUB_TOKEN=dummy_test_token_for_testing \
-            -e EMAIL_ADDRESS=test@example.com \
-            -e EMAIL_PASSWORD=dummy_test_password \
+            -e ADMIN_USERNAME=test-admin \
+            -e ADMIN_PASSWORD=dummy_test_password \
             -e STAKEHOLDERS_PSD=test1@noaa.gov,test2@noaa.gov \
             -e STAKEHOLDERS_GSD=test1@noaa.gov,test2@noaa.gov \
             -e STAKEHOLDERS_ESRL=test1@noaa.gov,test2@noaa.gov \

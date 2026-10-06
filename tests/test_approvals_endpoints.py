@@ -363,6 +363,24 @@ class TestAuthenticatedEndpoints:
         
         assert response.status_code == 401
 
+    def test_update_rejects_previous_email_credentials(self, client):
+        response = client.delete(
+            "/api/agreements/notfound@noaa.gov",
+            auth=("test@example.com", "test_password")
+        )
+
+        assert response.status_code == 401
+
+    def test_update_fails_when_admin_credentials_are_missing(self, client, monkeypatch):
+        monkeypatch.delenv("ADMIN_USERNAME", raising=False)
+
+        response = client.delete(
+            "/api/agreements/notfound@noaa.gov",
+            auth=("test-admin", "test_admin_password")
+        )
+
+        assert response.status_code == 500
+
     def test_update_agreement_with_auth(self, client, create_user_agreement, auth_credentials):
         """Test successful agreement update with authentication."""
         user = create_user_agreement(

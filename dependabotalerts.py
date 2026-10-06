@@ -5,10 +5,9 @@
 import requests
 import argparse
 import os
-import smtplib
-import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from smtp_relay import send_via_relay
 import time
 from datetime import datetime
 from dotenv import load_dotenv
@@ -199,14 +198,7 @@ def get_automation_owners():
 # Send email to a recipient
 def send_email(recipient, subject, message):
     print(f"Preparing to send email to {recipient} at {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    sender_email = os.getenv("EMAIL_ADDRESS")
-    password = os.getenv("EMAIL_PASSWORD")
-
-    if not sender_email or not password:
-        raise RuntimeError("Email configuration is missing (EMAIL_ADDRESS / EMAIL_PASSWORD)")
-    
-    # Specify the alternative "from" email address
-    from_email = "github.gsl@noaa.gov"  # Alternative email address authorized in Gmail account
+    from_email = os.getenv("MAIL_FROM", "github.gsl@noaa.gov")
 
     msg = MIMEMultipart()
     msg["From"] = from_email
@@ -216,15 +208,9 @@ def send_email(recipient, subject, message):
     body = MIMEText(message, "plain")
     msg.attach(body)
 
-    context = ssl.create_default_context()
-
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context, timeout=30) as server:
-            server.login(sender_email, password)
-            server.sendmail(sender_email, recipient, msg.as_string())
-            print(f"Email sent to: {recipient}")    
-    except smtplib.SMTPAuthenticationError:
-        print("Failed to send email due to authentication error. Please check your email credentials.")
+        send_via_relay(msg)
+        print(f"Email sent to: {recipient}")
     except Exception as e:
         print(f"Failed to send email: {str(e)}")
 
@@ -867,9 +853,6 @@ def main(argv=None):
     except RuntimeError as e:
         print(f"CONFIG ERROR: {e}")
         raise SystemExit(1)
-
-    if not os.getenv("EMAIL_ADDRESS") or not os.getenv("EMAIL_PASSWORD"):
-        print("WARNING: Email credentials not set; notifications will fail during send.")
 
     org = "NOAA-GSL"
     
