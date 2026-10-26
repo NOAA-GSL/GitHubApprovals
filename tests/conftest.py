@@ -110,7 +110,39 @@ def mock_github_api():
 
 
 @pytest.fixture
-def sample_user_data():
+def create_quiz_attempt(test_engine):
+    """
+    Factory fixture to create quiz attempts (passed and completed now by default).
+    """
+    import uuid
+    from datetime import datetime
+    from approvals import QuizAttempt
+
+    def _create(email="test.user@noaa.gov", purpose="new", passed=True, consumed=False, completed_at=None, started_at=None):
+        db = approvals.SessionLocal()
+        try:
+            now = datetime.utcnow()
+            attempt = QuizAttempt(
+                attempt_id=str(uuid.uuid4()),
+                email=email.lower(),
+                purpose=purpose,
+                answers="{}",
+                started_at=started_at or now,
+                completed_at=completed_at or now,
+                passed=passed,
+                consumed=consumed,
+            )
+            db.add(attempt)
+            db.commit()
+            return attempt.attempt_id
+        finally:
+            db.close()
+
+    return _create
+
+
+@pytest.fixture
+def sample_user_data(create_quiz_attempt):
     """
     Sample user data for testing user agreement submissions.
     FastAPI Form boolean fields accept 'on', 'true', 'yes', or '1' as True.
@@ -125,7 +157,8 @@ def sample_user_data():
         "sponsor": "sponsor@noaa.gov",
         "requirement1": "on",
         "requirement2": "on",
-        "requirement3": "on"
+        "requirement3": "on",
+        "quiz_attempt_id": create_quiz_attempt(email="test.user@noaa.gov"),
     }
 
 

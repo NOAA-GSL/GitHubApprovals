@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual GitHub Policy Renewal</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f7f9fc;
+      margin: 0;
+      padding: 0;
+      color: #0b2a6b;
+    }
+    .container {
+      max-width: 760px;
+      margin: 50px auto;
+      background: #fff;
+      padding: 32px 40px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    h1 { margin: 0 0 16px 0; font-size: 28px; text-align: center; }
+    .message { font-size: 16px; line-height: 1.6; color: #333; }
+    .policy-link { display: inline-block; margin: 8px 0 12px 0; font-weight: 600; }
+    button {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 5px;
+      background-color: #007bff;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover { background-color: #0056b3; }
+    button:disabled { background-color: #9bb8d9; cursor: not-allowed; }
+    .ack { display: flex; align-items: center; margin: 12px 0; }
+    .ack input { margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Annual GitHub Policy Renewal</h1>
+    <p class="message">Dear {{ first_name }},</p>
+    <p class="message">
+      To continue as a member of NOAA's <strong>{{ lab }}</strong> GitHub organization as a
+      <strong>{{ role }}</strong>, please review the GitHub Usage Policy and pass the assessment below.
+    </p>
+    <a class="policy-link" href="{{ policy_url }}" target="_blank" rel="noopener noreferrer">Read the GitHub Usage Policy</a>
+
+    <form id="renewalForm" method="post" action="" data-email="{{ email }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <input type="hidden" name="quiz_attempt_id" id="quiz_attempt_id" value="">
+
+      {% include "_quiz.html" %}
+
+      <div class="ack">
+        <input type="checkbox" name="acknowledge" id="acknowledge" value="true" required disabled>
+        <label for="acknowledge">I have read, understand, and agree to follow GSL's GitHub Usage Policy.</label>
+      </div>
+      <button type="submit" id="renewBtn" disabled>Renew Agreement</button>
+    </form>
+  </div>
+
+  <script>
+    const renewalForm = document.getElementById('renewalForm');
+    const acknowledge = document.getElementById('acknowledge');
+    const renewBtn = document.getElementById('renewBtn');
+    const quizAttemptInput = document.getElementById('quiz_attempt_id');
+
+    PolicyQuiz.init({
+      purpose: 'renewal',
+      getEmail: () => renewalForm.dataset.email,
+      onReset: () => {
+        quizAttemptInput.value = '';
+        acknowledge.checked = false;
+        acknowledge.disabled = true;
+        renewBtn.disabled = true;
+      },
+      onPass: (attemptId) => {
+        quizAttemptInput.value = attemptId;
+        acknowledge.disabled = false;
+        renewBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

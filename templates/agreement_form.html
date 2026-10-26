@@ -140,11 +140,12 @@
 
         <div class="checkbox-container">
             <div>
-                <input type="checkbox" name="requirement1" id="requirement1" required>
+                <input type="checkbox" name="requirement1" id="requirement1" required disabled>
                 <label for="requirement1">
                     <a id="policyLink" href="https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k" target="_blank">
                         Read and understand OAR's GitHub Usage Policy
                     </a>
+                    <br><small>(Pass the GitHub Policy Assessment below to unlock this checkbox.)</small>
                 </label>
             </div>
             <div>
@@ -172,6 +173,9 @@
                 </label>
             </div>
         </div>
+
+        {% include "_quiz.html" %}
+        <input type="hidden" name="quiz_attempt_id" id="quiz_attempt_id" value="">
         
     <button type="submit">Submit</button>
         <div id="message"></div>
@@ -236,6 +240,26 @@
 
         updatePolicyLink(esrlLabSelect.value);
 
+        const emailInput = document.querySelector('#agreementForm input[name="email"]');
+        const requirement1 = document.getElementById('requirement1');
+        const quizAttemptInput = document.getElementById('quiz_attempt_id');
+
+        PolicyQuiz.init({
+            purpose: 'new',
+            getEmail: () => emailInput.value,
+            // The passed attempt is bound to this email on the server
+            onStart: () => { emailInput.readOnly = true; },
+            onReset: () => {
+                quizAttemptInput.value = '';
+                requirement1.checked = false;
+                requirement1.disabled = true;
+            },
+            onPass: (attemptId) => {
+                quizAttemptInput.value = attemptId;
+                requirement1.disabled = false;
+            }
+        });
+
         // Populate sponsors on lab change
         esrlLabSelect.addEventListener('change', function() {
             populateSponsors(this.value);
@@ -244,6 +268,10 @@
 
         document.getElementById('agreementForm').addEventListener('submit', async function(event) {
             event.preventDefault();
+            if (!quizAttemptInput.value || !requirement1.checked) {
+                document.getElementById('message').innerText = 'You must pass the GitHub Policy Assessment (100%) and check the GitHub Usage Policy box before submitting.';
+                return;
+            }
             const formData = new FormData(event.target);
             const data = new URLSearchParams(formData);
 
