@@ -2,6 +2,7 @@
 notification/
 __pycache__/
 .env
+*.db
 /ApprovalProjectEnv
 sponsor_first_test.py
 zarr.py
