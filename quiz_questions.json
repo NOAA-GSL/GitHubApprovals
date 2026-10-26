@@ -1,0 +1,115 @@
+{
+  "title": "GSL GitHub Guidelines Assessment",
+  "questions": [
+    {
+      "id": 1,
+      "question": "According to the policy, is the GitHub account created and linked to your first.last@noaa.gov email considered a personal account or a place to store your work-related organizational code?",
+      "options": [
+        "It is an organizational account where work-related repositories can be stored directly under your username.",
+        "It is a personal account; all official work-related repositories must be created within the NOAA-GSL organization space.",
+        "It is a shared division account managed collectively by your Sponsor.",
+        "It automatically converts your personal workspace into a NOAA FISMA-accredited environment."
+      ],
+      "correctAnswer": "It is a personal account; all official work-related repositories must be created within the NOAA-GSL organization space."
+    },
+    {
+      "id": 2,
+      "question": "Are we required to license public code in our enterprise GitHub?",
+      "options": [
+        "No, licensing is optional for scientific research software.",
+        "Yes, public code must require an approved license, such as Apache 2.0.",
+        "Only repositories with more than five active contributors require licensing.",
+        "No, public code is placed under default copyright with no license file needed."
+      ],
+      "correctAnswer": "Yes, public code must require an approved license, such as Apache 2.0."
+    },
+    {
+      "id": 3,
+      "question": "Are we required to keep a README.md file associated with all repositories?",
+      "options": [
+        "Yes, a README.md file must be applied to every single repository without exception.",
+        "No, a README.md is only required if a repository transitions to public access.",
+        "No, it is optional as long as the code includes inline documentation.",
+        "Only repositories transferred to non-NOAA enterprise accounts require a README.md."
+      ],
+      "correctAnswer": "Yes, a README.md file must be applied to every single repository without exception."
+    },
+    {
+      "id": 4,
+      "question": "What authentication standard must all users enable on their GitHub account registered to their noaa.gov email?",
+      "options": [
+        "SMS-only verification codes.",
+        "Single-sign-on (SSO) with biometric bypass.",
+        "Dual-factor (two-factor) authentication.",
+        "Security questions updated quarterly."
+      ],
+      "correctAnswer": "Dual-factor (two-factor) authentication."
+    },
+    {
+      "id": 5,
+      "question": "What is the required timeframe for an Information Owner to address software vulnerabilities rated 'High' or greater in a public repository before public access is revoked?",
+      "options": [
+        "Within 24 hours.",
+        "Within 3 days.",
+        "Within 14 business days.",
+        "During the next quarterly review cycle."
+      ],
+      "correctAnswer": "Within 3 days."
+    },
+    {
+      "id": 6,
+      "question": "How must a user's GitHub password relate to their NOAA account credentials (e.g., NEMS, ICAM)?",
+      "options": [
+        "It must match your NOAA ICAM password for synchronization.",
+        "It must utilize a different password than that associated with any NOAA account.",
+        "It must be updated at the exact same time as your NOAA network credentials.",
+        "Passwords are not used; login is strictly handled through an external smart card."
+      ],
+      "correctAnswer": "It must utilize a different password than that associated with any NOAA account."
+    },
+    {
+      "id": 7,
+      "question": "Which email address must team members use when registering their GitHub account for NOAA-GSL access?",
+      "options": [
+        "Any personal email address (e.g., Gmail, Outlook).",
+        "A cooperative institute or university affiliate address.",
+        "Their official noaa.gov email address.",
+        "An anonymous alias address."
+      ],
+      "correctAnswer": "Their official noaa.gov email address."
+    },
+    {
+      "id": 8,
+      "question": "Which types of sensitive data are Information Owners strictly required to keep out of repository content?",
+      "options": [
+        "Personally Identifiable Information (PII).",
+        "Business Identifiable Information (BII).",
+        "Proprietary code or information.",
+        "All of the above."
+      ],
+      "correctAnswer": "All of the above."
+    },
+    {
+      "id": 9,
+      "question": "Which of the following defines and constitutes the role of an Information Owner under the GSL policy?",
+      "options": [
+        "The owner of a repository (or multiple repositories), often serving as a project's Principal Investigator.",
+        "An individual responsible for authorizing access, establishing access/release policies, and approving public pull requests.",
+        "The person responsible for ensuring code contains no proprietary data, PII, or BII, and that software vulnerabilities rated 'High' or greater are resolved within three days.",
+        "All of the above."
+      ],
+      "correctAnswer": "All of the above."
+    },
+    {
+      "id": 10,
+      "question": "Whose permission must a Team Member obtain before creating a new repository in NOAA-GSL?",
+      "options": [
+        "The Information System Security Officer (ISSO).",
+        "Their Division Sponsor (Division Chief).",
+        "The Department of Commerce Social Media Lead.",
+        "Any General User within the organization."
+      ],
+      "correctAnswer": "Their Division Sponsor (Division Chief)."
+    }
+  ]
+}

@@ -11,6 +11,15 @@ The application consists of the following main components:
 3. **Templates**: HTML templates for rendering forms, browsing agreements, and displaying progress/status.
 4. **Email Notifications**: Sending emails to stakeholders for approval and reminders.
 
+
+## Manual Trigger a renewal 
+kubectl exec -i -n gitauth deploy/githubuserauthcontainer -- sh -c 'cd / && python3 -' <<'EOF'
+import approvals as a
+EMAIL = "yujun.guo@noaa.gov"
+a._needs_renewal = lambda user, now: user.email == EMAIL
+a.check_for_renewals()
+EOF
+
 ## Files
 
 - **approvals.py**: The main FastAPI application file.
@@ -116,12 +125,21 @@ class UserAgreement(Base):
 - `GET /refuse_user/{email}/{approver_id}`: Refuses an agreement (via emailed link).
 - `GET /download-agreements/`: Downloads all agreements as a CSV file.
 - `GET /api/lab_sponsors`: Returns a list of labs and their sponsors for the form.
-- `GET /renew/{email}`: Allows users to renew their agreement.
+- `GET /renew/{email}`: Shows the renewal page (policy link + assessment) for a valid renewal token.
+- `POST /renew/{email}`: Completes the renewal after the user passes the assessment.
+- `GET /api/quiz`: Returns the policy assessment questions (without answers).
+- `POST /api/quiz/start`: Starts an assessment attempt for an email.
+- `POST /api/quiz/answer`: Grades one answer and returns the correct answer.
 - `GET /status`: Displays the status of user agreements.
 - `GET /dashboard`: Displays a lightweight dashboard summarizing agreements.
 - `GET /progress/{email}`: Displays the progress page for a specific user.
 - `POST /api/progress/{email}/generate`: Triggers GIF generation for a user.
 - `GET /api/progress/{email}/status`: Checks the status of GIF generation for a user.
+
+**GitHub Policy Assessment:**
+New agreements and yearly renewals require passing the assessment in `quiz_questions.json` with 100% in a single attempt. Answers are graded server-side; a wrong answer reveals the correct one and the user must retake. Edit questions in `quiz_questions.json` (changes go through the repo/PR and require an image rebuild).
+- `QUIZ_REQUIRED_SINCE` (optional, `YYYY-MM-DD`): on/after this date, fully approved users who have not passed the assessment since this date receive renewal reminders.
+- `RENEWAL_TOKEN_TTL_DAYS` (default `60`): how long a renewal link stays valid. Reminders reuse the same link until it expires.
 
 **Email Notifications:**
 Approval and Dependabot notifications use the internal SMTP relay through `smtplib`, with no SMTP login or TLS. Configure `SMTP_RELAY_HOST` (default `smtp-gw1.gsd.esrl.noaa.gov`), `SMTP_RELAY_PORT` (default `25`), and optionally `MAIL_FROM` (default `github.gsl@noaa.gov`).

@@ -1,0 +1,167 @@
+<style>
+    #quizSection {
+        text-align: left;
+        border: 1px solid #b0c4de;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 10px 0 15px 0;
+        background-color: rgba(240, 244, 255, 0.9);
+    }
+    #quizSection h3 { margin: 0 0 6px 0; }
+    #quizSection .quiz-intro { margin: 0 0 10px 0; font-size: 14px; }
+    #quizSection .quiz-question { margin: 14px 0; padding-bottom: 10px; border-bottom: 1px solid #dde4f0; }
+    #quizSection .quiz-question p { margin: 0 0 6px 0; font-weight: 600; }
+    #quizSection .quiz-option { display: block; margin: 4px 0; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
+    #quizSection .quiz-option input { margin-right: 8px; }
+    #quizSection .quiz-option.correct { background-color: #d4edda; }
+    #quizSection .quiz-option.wrong { background-color: #f8d7da; }
+    #quizSection .quiz-feedback { margin-top: 4px; font-size: 14px; }
+    #quizSection .quiz-feedback.correct { color: #155724; }
+    #quizSection .quiz-feedback.wrong { color: #721c24; }
+    #quizSection .quiz-status { font-weight: 600; margin: 8px 0; }
+    #quizSection .quiz-status.passed { color: #155724; }
+    #quizSection .quiz-status.failed { color: #721c24; }
+    #quizSection .quiz-hidden { display: none; }
+</style>
+
+<div id="quizSection">
+    <h3>GitHub Policy Assessment</h3>
+    <p class="quiz-intro">
+        Read the GitHub Usage Policy, then answer every question correctly (100%) to continue.
+        If you choose a wrong answer, the correct answer will be shown and you will need to retake the assessment.
+    </p>
+    <button type="button" id="quizStartBtn">Start Assessment</button>
+    <div id="quizQuestions"></div>
+    <div id="quizStatus" class="quiz-status" role="status" aria-live="polite"></div>
+    <button type="button" id="quizRetakeBtn" class="quiz-hidden">Retake Assessment</button>
+</div>
+
+<script>
+    window.PolicyQuiz = (function () {
+        const base = window.location.pathname.includes('/githubapprovals') ? '/githubapprovals/' : '/';
+        const startBtn = document.getElementById('quizStartBtn');
+        const retakeBtn = document.getElementById('quizRetakeBtn');
+        const questionsEl = document.getElementById('quizQuestions');
+        const statusEl = document.getElementById('quizStatus');
+        let config = null;
+        let questions = null;
+        let attemptId = null;
+        let anyWrong = false;
+
+        function setStatus(text, cls) {
+            statusEl.textContent = text;
+            statusEl.className = 'quiz-status' + (cls ? ' ' + cls : '');
+        }
+
+        async function postJson(path, body) {
+            const response = await fetch(base + path, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(typeof data.detail === 'string' ? data.detail : 'Request failed.');
+            }
+            return data;
+        }
+
+        function renderQuestions() {
+            questionsEl.innerHTML = '';
+            questions.forEach((q, index) => {
+                const block = document.createElement('div');
+                block.className = 'quiz-question';
+                const title = document.createElement('p');
+                title.textContent = `${index + 1}. ${q.question}`;
+                block.appendChild(title);
+                q.options.forEach(option => {
+                    const label = document.createElement('label');
+                    label.className = 'quiz-option';
+                    const radio = document.createElement('input');
+                    radio.type = 'radio';
+                    radio.name = `quiz_q_${q.id}`;
+                    radio.value = option;
+                    radio.addEventListener('change', () => submitAnswer(q.id, block, radio));
+                    label.appendChild(radio);
+                    label.appendChild(document.createTextNode(option));
+                    block.appendChild(label);
+                });
+                const feedback = document.createElement('div');
+                feedback.className = 'quiz-feedback';
+                block.appendChild(feedback);
+                questionsEl.appendChild(block);
+            });
+        }
+
+        async function submitAnswer(questionId, block, radio) {
+            const radios = block.querySelectorAll('input[type="radio"]');
+            radios.forEach(r => { r.disabled = true; });
+            const feedback = block.querySelector('.quiz-feedback');
+            try {
+                const result = await postJson('api/quiz/answer', {
+                    attempt_id: attemptId, question_id: questionId, answer: radio.value
+                });
+                radios.forEach(r => {
+                    if (r.value === result.correct_answer) r.parentElement.classList.add('correct');
+                });
+                if (result.correct) {
+                    feedback.textContent = 'Correct!';
+                    feedback.className = 'quiz-feedback correct';
+                } else {
+                    anyWrong = true;
+                    radio.parentElement.classList.add('wrong');
+                    feedback.textContent = `Incorrect. The correct answer is: ${result.correct_answer}`;
+                    feedback.className = 'quiz-feedback wrong';
+                    retakeBtn.classList.remove('quiz-hidden');
+                }
+
+                if (result.complete && result.passed) {
+                    setStatus(`Passed! You scored ${result.score}/${result.total} (100%).`, 'passed');
+                    retakeBtn.classList.add('quiz-hidden');
+                    config.onPass(attemptId);
+                } else if (result.complete) {
+                    setStatus(`You scored ${result.score}/${result.total}. 100% is required. Review the correct answers, then retake the assessment.`, 'failed');
+                } else if (anyWrong) {
+                    setStatus(`Answered ${result.answered}/${result.total}. You missed a question, so this attempt cannot pass. Keep reviewing or retake the assessment.`, 'failed');
+                } else {
+                    setStatus(`Answered ${result.answered}/${result.total} - all correct so far.`);
+                }
+            } catch (error) {
+                radios.forEach(r => { r.disabled = false; r.checked = false; });
+                setStatus(error.message, 'failed');
+            }
+        }
+
+        async function start() {
+            const email = (config.getEmail() || '').trim();
+            if (!email || !email.includes('@')) {
+                setStatus('Please enter your email address above before starting the assessment.', 'failed');
+                return;
+            }
+            try {
+                if (!questions) {
+                    const response = await fetch(base + 'api/quiz');
+                    questions = (await response.json()).questions;
+                }
+                const data = await postJson('api/quiz/start', { email: email, purpose: config.purpose });
+                attemptId = data.attempt_id;
+                anyWrong = false;
+                if (config.onStart) config.onStart();
+                config.onReset();
+                renderQuestions();
+                startBtn.classList.add('quiz-hidden');
+                retakeBtn.classList.add('quiz-hidden');
+                setStatus(`Answered 0/${questions.length}.`);
+            } catch (error) {
+                setStatus(error.message, 'failed');
+            }
+        }
+
+        startBtn.addEventListener('click', start);
+        retakeBtn.addEventListener('click', start);
+
+        return {
+            init(options) { config = options; }
+        };
+    })();
+</script>

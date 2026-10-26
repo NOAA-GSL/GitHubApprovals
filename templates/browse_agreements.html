@@ -47,6 +47,7 @@
                 <th style="width: 120px;">Role</th>
                 <th style="width: 80px;">Agreed</th>
                 <th style="width: 140px;">Last Renewal Date</th>
+                <th style="width: 140px;">Policy Assessment</th>
                 <th class="actions-col">Actions</th>
                 <th class="status-col">Approval Status</th>
                 <th class="status-col">Sponsor</th>
@@ -77,6 +78,14 @@
                         <input type="checkbox" class="edit-field" id="agreed_{{ agreement.email }}" {% if agreement.agreed %}checked{% endif %}>
                     </td>
                     <td><input type="text" class="edit-field" id="last_renewal_date_{{ agreement.email }}" value="{{ agreement.last_renewal_date }}"></td>
+                    <td>
+                        {% if agreement.quiz_passed_at %}
+                            <span style="color:green;">Passed {{ agreement.quiz_passed_at.strftime('%Y-%m-%d') }}</span><br>
+                            {{ agreement.quiz_attempts or 1 }} attempt{% if (agreement.quiz_attempts or 1) != 1 %}s{% endif %}
+                        {% else %}
+                            Not taken
+                        {% endif %}
+                    </td>
                     <td class="actions-col">
                         <button onclick="saveAgreement('{{ agreement.email }}')">Save</button>
                         <button onclick="deleteAgreement('{{ agreement.email }}')">Delete</button>

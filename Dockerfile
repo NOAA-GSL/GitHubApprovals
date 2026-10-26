@@ -27,6 +27,7 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements-dev.txt
 COPY approvals.py /approvals.py
 COPY smtp_relay.py /smtp_relay.py
 COPY verification_progress_gif.py /verification_progress_gif.py
+COPY quiz_questions.json /quiz_questions.json
 #NOTE: flipping this copy you can test a green or blue version of the code
 #COPY blue_version.py /approvals.py
 

@@ -33,7 +33,11 @@ Endpoints:
 - GET /api/progress/{email}/status: Checks the status of GIF generation for a user.
 - GET /download-agreements/: Downloads all agreements as a CSV file.
 - GET /api/lab_sponsors: Retrieves the list of labs and their sponsors.
-- GET /renew/{email}: Renews a user's agreement.
+- GET /renew/{email}: Shows the renewal page (policy + assessment).
+- POST /renew/{email}: Completes renewal after a passed assessment.
+- GET /api/quiz: Returns policy assessment questions (no answers).
+- POST /api/quiz/start: Starts an assessment attempt.
+- POST /api/quiz/answer: Grades one answer and reveals the correct answer.
 - PUT /api/agreements/{email}: Updates an existing agreement.
 - DELETE /api/agreements/{email}: Deletes an existing agreement.
 author: Renn Valo
@@ -46,6 +50,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, func, Text
+import json
+import secrets
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -187,6 +193,35 @@ def _is_flag_set(value) -> bool:
     return value not in (None, "", 0, "0")
 
 
+# Policy assessment (quiz) configuration
+QUIZ_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quiz_questions.json")
+with open(QUIZ_FILE, encoding="utf-8") as _quiz_file:
+    QUIZ = json.load(_quiz_file)
+QUIZ_QUESTIONS = {q["id"]: q for q in QUIZ["questions"]}
+QUIZ_PURPOSES = ("new", "renewal")
+QUIZ_PASS_VALID_FOR = timedelta(hours=24)
+RENEWAL_TOKEN_TTL_DAYS = int(os.getenv("RENEWAL_TOKEN_TTL_DAYS", "60"))
+
+DEFAULT_POLICY_URL = "https://docs.google.com/document/d/1lCFyaoes64q7x23uGICeY1gQNdnGJE0dAFwS0wBDi9k"
+POLICY_LINKS_BY_LAB = {
+    "psl": "https://docs.google.com/document/d/1-Aytk1fwVDZEHd8fxqHHvygfByc_jgLCWuAwdQJiCJw/",
+    "gsl": DEFAULT_POLICY_URL,
+    "gml": "https://docs.google.com/document/d/1VbKIXC2wxR_SwXviBmoTjfbluVRKud3oarehrrWU5j8/",
+}
+
+
+def get_quiz_required_since() -> Optional[datetime]:
+    """Parse QUIZ_REQUIRED_SINCE (YYYY-MM-DD); users without a quiz pass since this date must renew."""
+    value = os.getenv("QUIZ_REQUIRED_SINCE", "").strip()
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        logging.error(f"[QUIZ] Invalid QUIZ_REQUIRED_SINCE value '{value}'; expected YYYY-MM-DD. Ignoring.")
+        return None
+
+
 def get_github_org_license_usage(org: str = ORG_NAME) -> Optional[tuple]:
     """Return (total_seats, filled_seats) from GitHub, or None if unavailable (bad token scope, network issue, etc.)."""
     if not GITHUB_TOKEN:
@@ -275,6 +310,21 @@ class UserAgreement(Base):
     disapprover_email3 = Column(String)  
     disapprover_email4 = Column(String)  
     last_reminder_sent = Column(DateTime, nullable=True)  # Track when last reminder was sent
+    quiz_passed_at = Column(DateTime, nullable=True)
+    quiz_attempts = Column(Integer, nullable=True)
+    renewal_token_issued_at = Column(DateTime, nullable=True)
+
+class QuizAttempt(Base):
+    __tablename__ = "quiz_attempts"
+    id = Column(Integer, primary_key=True, index=True)
+    attempt_id = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, index=True, nullable=False)
+    purpose = Column(String, nullable=False)  # "new" or "renewal"
+    answers = Column(Text, default="{}")  # JSON: {question_id: selected option}
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    passed = Column(Boolean, default=False)
+    consumed = Column(Boolean, default=False)
 
 Base.metadata.create_all(bind=engine)
 
@@ -354,9 +404,49 @@ def migrate_add_copilot_license_column():
         logging.error(f"[MIGRATION] Error adding copilot_license column: {str(e)}")
         raise
 
+def migrate_add_quiz_columns():
+    """Add quiz/renewal-token columns to existing database if they don't exist.
+
+    This migration is idempotent and safe to run multiple times.
+    """
+    db_path = "./agreement.db" if IS_DEVELOPMENT else "/data/agreement.db"
+    if not os.path.exists(db_path):
+        logging.info("[MIGRATION] Database not found, will be created by SQLAlchemy")
+        return
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(user_agreements)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        for name, col_type in (("quiz_passed_at", "DATETIME"), ("quiz_attempts", "INTEGER")):
+            if name not in columns:
+                logging.info(f"[MIGRATION] Adding {name} column to user_agreements table")
+                cursor.execute(f"ALTER TABLE user_agreements ADD COLUMN {name} {col_type}")
+
+        if "renewal_token_issued_at" not in columns:
+            logging.info("[MIGRATION] Adding renewal_token_issued_at column to user_agreements table")
+            cursor.execute("ALTER TABLE user_agreements ADD COLUMN renewal_token_issued_at DATETIME")
+            # Renewal links already emailed before this column existed start their 60-day window now
+            now = datetime.utcnow()
+            cursor.execute(
+                "UPDATE user_agreements SET renewal_token_issued_at = ? "
+                "WHERE approval_token1 IS NOT NULL AND last_renewal_date <= ?",
+                (now.strftime("%Y-%m-%d %H:%M:%S.%f"), (now - timedelta(days=365)).strftime("%Y-%m-%d %H:%M:%S.%f")),
+            )
+            logging.info(f"[MIGRATION] Backfilled renewal_token_issued_at for {cursor.rowcount} outstanding renewal tokens")
+
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"[MIGRATION] Error adding quiz columns: {str(e)}")
+        raise
+
 # Run migration immediately after schema creation
 migrate_add_last_reminder_sent_column()
 migrate_add_copilot_license_column()
+migrate_add_quiz_columns()
 
 scheduler = BackgroundScheduler()
 scheduler.start()
@@ -364,25 +454,49 @@ scheduler.start()
 # Track reminder jobs for each user email so we can cancel them later
 REMINDER_JOBS = {}
 
+def _is_fully_approved(user: "UserAgreement") -> bool:
+    if user.final_approval_timestamp:
+        return True
+    return all(_is_flag_set(v) for v in (user.sponsorid, user.systemowner, user.accountadmin, user.isso))
+
+def _needs_renewal(user: "UserAgreement", now: datetime) -> bool:
+    if user.last_renewal_date and user.last_renewal_date <= now - timedelta(days=365):
+        return True
+    cutoff = get_quiz_required_since()
+    # Pending users are skipped: approval_token1 is still their sponsor approval token
+    if cutoff and now >= cutoff and _is_fully_approved(user):
+        return user.quiz_passed_at is None or user.quiz_passed_at < cutoff
+    return False
+
+def _renewal_token_is_fresh(user: "UserAgreement", now: datetime) -> bool:
+    return bool(
+        user.approval_token1
+        and user.renewal_token_issued_at
+        and now - user.renewal_token_issued_at < timedelta(days=RENEWAL_TOKEN_TTL_DAYS)
+    )
+
 # Function to check for users who need to renew and send reminder emails
 def check_for_renewals():
     session = SessionLocal()
     logging.info(f"[RENEWAL] check_for_renewals() started at {datetime.utcnow().isoformat()}")
     
-    # Fetch users who need renewal
-    users_to_renew = session.query(UserAgreement).filter(
-        UserAgreement.last_renewal_date <= datetime.utcnow() - timedelta(days=365)
-    ).all()
+    now = datetime.utcnow()
+    users_to_renew = [u for u in session.query(UserAgreement).all() if _needs_renewal(u, now)]
     logging.info(f"[RENEWAL] Found {len(users_to_renew)} users needing renewal")
 
     for user in users_to_renew:
         logging.info(f"[RENEWAL] Processing renewal for user_email={user.email}, last_renewal_date={user.last_renewal_date}")
 
-        # Generate renewal token and store it
-        renewal_token = str(uuid.uuid4())
-        user.approval_token1 = renewal_token
-        session.commit()
-        logging.debug(f"[RENEWAL] Generated renewal token for user_email={user.email}")
+        # Reuse an unexpired token so links in earlier reminders keep working
+        if _renewal_token_is_fresh(user, now):
+            renewal_token = user.approval_token1
+            logging.debug(f"[RENEWAL] Reusing existing renewal token for user_email={user.email}")
+        else:
+            renewal_token = str(uuid.uuid4())
+            user.approval_token1 = renewal_token
+            user.renewal_token_issued_at = now
+            session.commit()
+            logging.debug(f"[RENEWAL] Generated renewal token for user_email={user.email}")
 
         # Generate the renewal link with token and message
         renewal_link = f"{BASE_URL}/renew/{user.email}?token={renewal_token}"
@@ -398,9 +512,12 @@ It has been over a year since your last review of GSL's GitHub Usage Policy Agre
 To continue as a member of NOAA's {lab} GitHub organization you will need to:
   - Read and understand the roles and responsibilities for being a GSL GitHub {user.role}.
   - The latest updates to GSL's GitHub Usage Policy can be found here: {policy_link}
+  - Pass the GitHub Policy Assessment (100% required) on the renewal page.
 
-Agree to follow the roles and responsibilities by clicking the link below:
+Complete the assessment and agree to follow the roles and responsibilities by clicking the link below:
 {renewal_link}
+
+This link is valid for {RENEWAL_TOKEN_TTL_DAYS} days.
 
 NOTE: You must be on the wired network at NOAA or VPNed in to access the links above.
 
@@ -420,7 +537,8 @@ Your GSL ITS Team"""
             ],
             action_items=[
                 f'Read the latest <a href="{policy_link}" style="color:#003087;">GSL GitHub Usage Policy</a>',
-                "Click the <strong>Renew Agreement</strong> button below to confirm",
+                "Click the <strong>Renew Agreement</strong> button below and pass the GitHub Policy Assessment (100% required)",
+                f"This renewal link is valid for {RENEWAL_TOKEN_TTL_DAYS} days",
             ],
             action_link=renewal_link,
             action_label="Renew Agreement",
@@ -665,6 +783,8 @@ NOTE: You must be on the wired network at NOAA or VPNed in to access the links b
 
 You have sponsored {user_email} to join NOAA's {lab} GitHub organization.
 
+GitHub Policy Assessment: {_quiz_summary(user)}
+
 Do you approve or refuse {user_email}'s request to join NOAA's {lab} GitHub organization?:
 - Approve:
 {approval_link}
@@ -689,6 +809,7 @@ Your Approval Team"""
             ("Applicant Email", user_email),
             ("Lab", f"NOAA's {lab} GitHub organization"),
             ("Your Role", "Sponsor"),
+            ("Policy Assessment", _quiz_summary(user)),
         ],
         action_items=[
             "Review the request details above",
@@ -753,6 +874,8 @@ NOTE: You must be on the wired network at NOAA or VPNed in to access the links b
 
 {sponsor_name} has sponsored {user_email} to join NOAA's {lab} GitHub organization.
 
+GitHub Policy Assessment: {_quiz_summary(user)}
+
 {license_line}Do you approve or refuse {user_email}'s request to join NOAA's {lab} GitHub organization?:
 - Approve:
 {approval_link}
@@ -778,6 +901,7 @@ Your Approval Team"""
                 ("Lab", f"NOAA's {lab} GitHub organization"),
                 ("Sponsor", sponsor_name),
                 ("Your Role", role),
+                ("Policy Assessment", _quiz_summary(user)),
                 *license_rows,
             ],
             action_items=[
@@ -969,6 +1093,120 @@ Your Approval Team"""
 @app.get("/", response_class=HTMLResponse)
 async def get_agreement_form(request: Request):
     return templates.TemplateResponse("agreement_form.html", {"request": request})
+
+class QuizStartRequest(BaseModel):
+    email: str
+    purpose: str = "new"
+
+class QuizAnswerRequest(BaseModel):
+    attempt_id: str
+    question_id: int
+    answer: str
+
+def _normalize_email(email: Optional[str]) -> str:
+    return (email or "").strip().lower()
+
+@app.get("/api/quiz")
+async def get_quiz():
+    """Return quiz questions without the answer key."""
+    return {
+        "title": QUIZ.get("title", "GitHub Policy Assessment"),
+        "questions": [
+            {"id": q["id"], "question": q["question"], "options": q["options"]}
+            for q in QUIZ["questions"]
+        ],
+    }
+
+@app.post("/api/quiz/start")
+async def start_quiz(body: QuizStartRequest):
+    email = _normalize_email(body.email)
+    if "@" not in email or len(email) > 254:
+        raise HTTPException(status_code=400, detail="A valid email address is required to start the assessment.")
+    if body.purpose not in QUIZ_PURPOSES:
+        raise HTTPException(status_code=400, detail="Invalid assessment purpose.")
+    session = SessionLocal()
+    try:
+        attempt = QuizAttempt(attempt_id=str(uuid.uuid4()), email=email, purpose=body.purpose, answers="{}")
+        session.add(attempt)
+        session.commit()
+        logging.info(f"[QUIZ] Attempt started: user_email={email}, purpose={body.purpose}")
+        return {"attempt_id": attempt.attempt_id, "total": len(QUIZ_QUESTIONS)}
+    finally:
+        session.close()
+
+@app.post("/api/quiz/answer")
+async def answer_quiz(body: QuizAnswerRequest):
+    question = QUIZ_QUESTIONS.get(body.question_id)
+    if not question:
+        raise HTTPException(status_code=400, detail="Unknown question.")
+    if body.answer not in question["options"]:
+        raise HTTPException(status_code=400, detail="Invalid answer option.")
+    session = SessionLocal()
+    try:
+        attempt = session.query(QuizAttempt).filter(QuizAttempt.attempt_id == body.attempt_id).first()
+        if not attempt:
+            raise HTTPException(status_code=404, detail="Assessment attempt not found. Please start again.")
+        if attempt.completed_at:
+            raise HTTPException(status_code=400, detail="This assessment attempt is already finished. Please retake.")
+        answers = json.loads(attempt.answers or "{}")
+        key = str(body.question_id)
+        if key in answers:
+            raise HTTPException(status_code=409, detail="This question has already been answered.")
+        answers[key] = body.answer
+        attempt.answers = json.dumps(answers)
+
+        score = sum(1 for qid, ans in answers.items() if QUIZ_QUESTIONS[int(qid)]["correctAnswer"] == ans)
+        complete = len(answers) == len(QUIZ_QUESTIONS)
+        if complete:
+            attempt.completed_at = datetime.utcnow()
+            attempt.passed = score == len(QUIZ_QUESTIONS)
+            logging.info(f"[QUIZ] Attempt finished: user_email={attempt.email}, purpose={attempt.purpose}, score={score}/{len(QUIZ_QUESTIONS)}, passed={attempt.passed}")
+        session.commit()
+
+        return {
+            "correct": body.answer == question["correctAnswer"],
+            "correct_answer": question["correctAnswer"],
+            "answered": len(answers),
+            "score": score,
+            "total": len(QUIZ_QUESTIONS),
+            "complete": complete,
+            "passed": bool(attempt.passed),
+        }
+    finally:
+        session.close()
+
+def _get_valid_passed_attempt(session, attempt_id: Optional[str], email: str, purpose: str) -> Optional[QuizAttempt]:
+    """Return the attempt if it is a passed, unused, recent attempt for this email/purpose."""
+    if not attempt_id:
+        return None
+    attempt = session.query(QuizAttempt).filter(QuizAttempt.attempt_id == attempt_id).first()
+    if (
+        not attempt
+        or not attempt.passed
+        or attempt.consumed
+        or attempt.purpose != purpose
+        or attempt.email != _normalize_email(email)
+        or not attempt.completed_at
+        or datetime.utcnow() - attempt.completed_at > QUIZ_PASS_VALID_FOR
+    ):
+        return None
+    return attempt
+
+def _record_quiz_pass(session, user: "UserAgreement", attempt: QuizAttempt, attempts_since: Optional[datetime] = None):
+    query = session.query(QuizAttempt).filter(
+        QuizAttempt.email == attempt.email, QuizAttempt.purpose == attempt.purpose
+    )
+    if attempts_since:
+        query = query.filter(QuizAttempt.started_at >= attempts_since)
+    attempt.consumed = True
+    user.quiz_passed_at = attempt.completed_at
+    user.quiz_attempts = max(query.count(), 1)
+
+def _quiz_summary(user: "UserAgreement") -> str:
+    if not user.quiz_passed_at:
+        return "Not recorded"
+    attempts = user.quiz_attempts or 1
+    return f"Passed 100% on {user.quiz_passed_at.strftime('%B %d, %Y')} ({attempts} attempt{'s' if attempts != 1 else ''})"
 
 def _gif_fs_and_url_for_user_id(uid: int):
     fs_path = os.path.join("images", f"progress_{uid}.gif")
@@ -1289,7 +1527,8 @@ async def submit_agreement(
     requirement1: bool = Form(...),
     requirement2: bool = Form(...),
     requirement3: bool = Form(...),
-    requirement4: bool = Form(False)
+    requirement4: bool = Form(False),
+    quiz_attempt_id: Optional[str] = Form(None)
 ):
     copilot_license_bool = copilot_license.strip().lower() == "yes"
     logging.info(f"[APPROVAL] Received agreement submission: user_email={email}, first_name={first_name}, last_name={last_name}, github_username={github_username}, lab={esrl_lab}, role={role}, sponsor={sponsor}, copilot_license={copilot_license_bool}")
@@ -1306,6 +1545,11 @@ async def submit_agreement(
             logging.error(f"[APPROVAL] Duplicate submission attempt for user_email={email}")
             raise HTTPException(status_code=400, detail="Agreement already submitted for this email. You should be hearing back shortly.")
 
+        attempt = _get_valid_passed_attempt(session, quiz_attempt_id, email, "new")
+        if not attempt:
+            logging.error(f"[APPROVAL] Missing or invalid passed assessment for user_email={email}")
+            raise HTTPException(status_code=400, detail="You must pass the GitHub Policy Assessment with 100% before submitting.")
+
         # Create the user agreement in the database
         user_agreement = UserAgreement(
             email=email,
@@ -1320,6 +1564,7 @@ async def submit_agreement(
             last_renewal_date=datetime.utcnow() # Set the last renewal date to now
         )
         session.add(user_agreement)
+        _record_quiz_pass(session, user_agreement, attempt)
         session.commit()
         logging.info(f"[APPROVAL] Agreement created in database: user_email={email}, github_username={github_username}, lab={esrl_lab}, role={role}, sponsor={sponsor}")
 
@@ -1590,79 +1835,147 @@ async def get_lab_sponsors():
         sponsors_by_lab.setdefault(lab, []).append(sponsor)
     return sponsors_by_lab
 
-# Add a new endpoint for users to renew their agreement
+_RENEWAL_ERRORS = {
+    "not_found": {
+        "page_title": "User Not Found",
+        "heading": "User Not Found",
+        "message": "We couldn't find an agreement associated with this email address.",
+        "submessage": "Please contact the GSL ITS Team if you believe this is an error.",
+        "show_info_box": False,
+    },
+    "missing": {
+        "page_title": "Token Required",
+        "heading": "Renewal Link Invalid",
+        "message": "This renewal link is incomplete or has expired.",
+        "submessage": "Please use the renewal link from your most recent reminder email.",
+        "show_info_box": True,
+        "info_items": [
+            "🔗 Renewal links must include a security token",
+            "📧 Check your email for the complete renewal link",
+            "⏰ Tokens expire after use for security",
+            "❓ Contact the GSL ITS Team if you need a new renewal link"
+        ],
+    },
+    "invalid": {
+        "page_title": "Invalid Token",
+        "heading": "Renewal Link Invalid",
+        "message": "This renewal link is invalid or has already been used.",
+        "submessage": "Please use the renewal link from your most recent reminder email.",
+        "show_info_box": True,
+        "info_items": [
+            "🔒 Each renewal link can only be used once",
+            "📧 Check your email for the latest renewal link",
+            "⏰ Old links expire after use for security",
+            "❓ Contact the GSL ITS Team if you need a new renewal link"
+        ],
+    },
+    "expired": {
+        "page_title": "Renewal Link Expired",
+        "heading": "Renewal Link Expired",
+        "message": f"Renewal links are valid for {RENEWAL_TOKEN_TTL_DAYS} days and this one has expired.",
+        "submessage": "A new renewal link will be sent with your next renewal reminder email.",
+        "show_info_box": True,
+        "info_items": [
+            "📧 Watch your email for a new renewal link",
+            "❓ Contact the GSL ITS Team if you need a new renewal link sooner"
+        ],
+    },
+    "quiz": {
+        "page_title": "Assessment Required",
+        "heading": "Renewal Not Completed",
+        "message": "You must pass the GitHub Policy Assessment with 100% and acknowledge the policy to renew.",
+        "submessage": "Please open your renewal link again and complete the assessment.",
+        "show_info_box": True,
+        "info_items": [
+            "📝 Every question must be answered correctly in a single attempt",
+            "🔁 You may retake the assessment as many times as needed",
+            "⏰ A passed assessment must be used within 24 hours"
+        ],
+    },
+}
+
+def _renewal_error_response(request: Request, email: str, kind: str, status_code: int = 200):
+    context = {
+        "request": request,
+        "email": email,
+        "icon_type": "error",
+        "icon": "✗",
+        "footer_message": "For assistance, please contact the GSL ITS Team.",
+    }
+    context.update(_RENEWAL_ERRORS[kind])
+    return templates.TemplateResponse("confirmation.html", context, status_code=status_code)
+
+def _renewal_token_error(user: UserAgreement, token: Optional[str]) -> Optional[str]:
+    if token is None:
+        return "missing"
+    if not user.approval_token1 or not secrets.compare_digest(user.approval_token1.encode(), token.encode()):
+        return "invalid"
+    if not _renewal_token_is_fresh(user, datetime.utcnow()):
+        return "expired"
+    return None
+
 @app.get("/renew/{email}", response_class=HTMLResponse)
 async def renew_agreement(request: Request, email: str, token: str = None):
+    """Show the renewal page (policy + assessment); renewal completes via POST."""
     logging.info(f"[RENEWAL] Renewal endpoint called: user_email={email}, token_provided={token is not None}")
     session = SessionLocal()
-    user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
-    if not user:
-        logging.error(f"[RENEWAL] User not found for renewal: user_email={email}")
-        session.close()
-        return templates.TemplateResponse("confirmation.html", {
-            "request": request,
-            "page_title": "User Not Found",
-            "heading": "User Not Found",
-            "message": "We couldn't find an agreement associated with this email address.",
-            "submessage": "Please contact the GSL ITS Team if you believe this is an error.",
-            "icon_type": "error",
-            "icon": "✗",
-            "show_info_box": False,
-            "email": email,
-            "footer_message": "For assistance, please contact the GSL ITS Team."
-        })
+    try:
+        user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
+        if not user:
+            logging.error(f"[RENEWAL] User not found for renewal: user_email={email}")
+            return _renewal_error_response(request, email, "not_found")
 
-    # Check if token is missing
-    if token is None:
-        logging.warning(f"[RENEWAL] No token provided for user_email={email}")
-        session.close()
-        return templates.TemplateResponse("confirmation.html", {
-            "request": request,
-            "page_title": "Token Required",
-            "heading": "Renewal Link Invalid",
-            "message": "This renewal link is incomplete or has expired.",
-            "submessage": "Please use the renewal link from your most recent reminder email.",
-            "icon_type": "error",
-            "icon": "✗",
-            "show_info_box": True,
-            "email": email,
-            "info_items": [
-                "🔗 Renewal links must include a security token",
-                "📧 Check your email for the complete renewal link",
-                "⏰ Tokens expire after use for security",
-                "❓ Contact the GSL ITS Team if you need a new renewal link"
-            ],
-            "footer_message": "For assistance, please contact the GSL ITS Team."
-        })
+        error = _renewal_token_error(user, token)
+        if error:
+            logging.warning(f"[RENEWAL] Renewal link rejected ({error}) for user_email={email}")
+            return _renewal_error_response(request, email, error)
 
-    # Validate the renewal token
-    if user.approval_token1 != token:
-        logging.warning(f"[RENEWAL] Invalid token provided for user_email={email}")
-        session.close()
-        return templates.TemplateResponse("confirmation.html", {
+        return templates.TemplateResponse("renewal.html", {
             "request": request,
-            "page_title": "Invalid Token",
-            "heading": "Renewal Link Invalid",
-            "message": "This renewal link is invalid or has already been used.",
-            "submessage": "Please use the renewal link from your most recent reminder email.",
-            "icon_type": "error",
-            "icon": "✗",
-            "show_info_box": True,
-            "email": email,
-            "info_items": [
-                "🔒 Each renewal link can only be used once",
-                "📧 Check your email for the latest renewal link",
-                "⏰ Old links expire after use for security",
-                "❓ Contact the GSL ITS Team if you need a new renewal link"
-            ],
-            "footer_message": "For assistance, please contact the GSL ITS Team."
+            "email": user.email,
+            "first_name": user.first_name,
+            "lab": (user.esrl_lab or "").upper(),
+            "role": user.role,
+            "token": token,
+            "policy_url": POLICY_LINKS_BY_LAB.get((user.esrl_lab or "").lower(), DEFAULT_POLICY_URL),
         })
+    finally:
+        session.close()
 
-    renewal_timestamp = datetime.utcnow()
-    user.last_renewal_date = renewal_timestamp
-    # Clear the token after successful renewal
-    user.approval_token1 = None
-    session.commit()
+@app.post("/renew/{email}", response_class=HTMLResponse)
+async def complete_renewal(
+    request: Request,
+    email: str,
+    token: Optional[str] = Form(None),
+    quiz_attempt_id: Optional[str] = Form(None),
+    acknowledge: bool = Form(False),
+):
+    logging.info(f"[RENEWAL] Renewal submission received: user_email={email}")
+    session = SessionLocal()
+    try:
+        user = session.query(UserAgreement).filter(UserAgreement.email == email).first()
+        if not user:
+            logging.error(f"[RENEWAL] User not found for renewal: user_email={email}")
+            return _renewal_error_response(request, email, "not_found")
+
+        error = _renewal_token_error(user, token)
+        if error:
+            logging.warning(f"[RENEWAL] Renewal submission rejected ({error}) for user_email={email}")
+            return _renewal_error_response(request, email, error)
+
+        attempt = _get_valid_passed_attempt(session, quiz_attempt_id, email, "renewal")
+        if not attempt or not acknowledge:
+            logging.warning(f"[RENEWAL] Renewal submission missing passed assessment or acknowledgement: user_email={email}")
+            return _renewal_error_response(request, email, "quiz", status_code=400)
+
+        renewal_timestamp = datetime.utcnow()
+        _record_quiz_pass(session, user, attempt, attempts_since=user.renewal_token_issued_at)
+        user.last_renewal_date = renewal_timestamp
+        user.approval_token1 = None
+        user.renewal_token_issued_at = None
+        session.commit()
+    finally:
+        session.close()
     logging.info(f"[RENEWAL] Agreement renewed successfully: user_email={email}, renewal_timestamp={renewal_timestamp.isoformat()}")
     
     # Calculate next renewal date for display
@@ -1675,7 +1988,6 @@ async def renew_agreement(request: Request, email: str, token: str = None):
         logging.error(f"[RENEWAL] Failed to send confirmation email to user_email={email}: {str(e)}")
         # Don't fail the renewal if email fails
     
-    session.close()
     return templates.TemplateResponse("confirmation.html", {
         "request": request,
         "page_title": "Renewal Confirmed",

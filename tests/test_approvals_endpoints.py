@@ -305,14 +305,15 @@ class TestApprovalWorkflow:
 class TestRenewalWorkflow:
     """Test the annual renewal workflow."""
 
-    def test_renew_agreement_success(self, client, create_user_agreement, mock_send_email):
-        """Test successful agreement renewal."""
+    def test_renew_agreement_success(self, client, create_user_agreement, create_quiz_attempt, mock_send_email):
+        """Renewal link shows the assessment page; POST with a passed attempt completes renewal."""
         old_date = datetime.utcnow() - timedelta(days=400)
         renewal_token = "renewal-test-token"
         user = create_user_agreement(
             email="renew@noaa.gov",
             last_renewal_date=old_date,
             approval_token1=renewal_token,
+            renewal_token_issued_at=datetime.utcnow() - timedelta(days=1),
             sponsorid="sponsor@noaa.gov",
             systemowner="owner@noaa.gov",
             accountadmin="admin@noaa.gov",
@@ -320,11 +321,18 @@ class TestRenewalWorkflow:
         )
         
         response = client.get(f"/renew/renew@noaa.gov?token={renewal_token}")
+        assert response.status_code == 200
+        assert b"GitHub Policy Assessment" in response.content
+
+        attempt_id = create_quiz_attempt(email="renew@noaa.gov", purpose="renewal")
+        response = client.post(
+            "/renew/renew@noaa.gov",
+            data={"token": renewal_token, "quiz_attempt_id": attempt_id, "acknowledge": "true"},
+        )
         
         assert response.status_code == 200
-        # Now returns HTML instead of JSON
         assert b"Renewal Confirmed" in response.content
-        assert b"renewed successfully" in response.content.lower() or b"all set for another year" in response.content.lower()
+        assert b"all set for another year" in response.content.lower()
 
     def test_renew_nonexistent_user(self, client):
         """Test renewal for non-existent user returns user-friendly HTML page."""
