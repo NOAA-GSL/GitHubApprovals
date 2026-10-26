@@ -11,6 +11,15 @@ The application consists of the following main components:
 3. **Templates**: HTML templates for rendering forms, browsing agreements, and displaying progress/status.
 4. **Email Notifications**: Sending emails to stakeholders for approval and reminders.
 
+
+## Manual Trigger a renewal 
+kubectl exec -i -n gitauth deploy/githubuserauthcontainer -- sh -c 'cd / && python3 -' <<'EOF'
+import approvals as a
+EMAIL = "yujun.guo@noaa.gov"
+a._needs_renewal = lambda user, now: user.email == EMAIL
+a.check_for_renewals()
+EOF
+
 ## Files
 
 - **approvals.py**: The main FastAPI application file.
