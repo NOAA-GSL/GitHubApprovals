@@ -299,27 +299,34 @@ def get_collaborators_with_admin_access(owner, repo, email_map):
 
 # Fetch repositories with Dependabot alerts
 def get_dependabot_alerts(org, max_pages=None, max_total=None):
-    """Fetch OPEN Dependabot alerts for an org (no pagination supported)."""
-    url = f"https://api.github.com/orgs/{org}/dependabot/alerts?state=open"
+    """Fetch open organization alerts, following GitHub's pagination links."""
+    url = f"https://api.github.com/orgs/{org}/dependabot/alerts?state=open&per_page=100"
     print(f"[Dependabot] Fetching all open alerts for org {org}...")
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-    except requests.RequestException as e:
-        print(f"[Dependabot] Request failed: {e}")
-        return []
-    except requests.HTTPError as e:
-        print(f"[Dependabot] HTTP error: {e} - body: {response.text[:300]}")
-        return []
-    data = response.json()
-    if not isinstance(data, list):
-        print(f"[Dependabot] Unexpected response type (not list): {data}")
-        return []
-    open_alerts = [a for a in data if a.get('state') == 'open']
+    open_alerts = []
+    page = 0
+    while url:
+        page += 1
+        print(f"[Dependabot] Fetching page {page} for org {org}...")
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            print(f"[Dependabot] Request failed on page {page}: {e}")
+            raise
+        data = response.json()
+        if not isinstance(data, list):
+            raise ValueError(f"[Dependabot] Unexpected response type on page {page}: expected list")
+        open_alerts.extend(alert for alert in data if alert.get('state') == 'open')
+        url = response.links.get("next", {}).get("url")
+        if max_total and len(open_alerts) >= max_total:
+            if len(open_alerts) > max_total or url:
+                print(f"[Dependabot] WARNING: Results limited to max_total {max_total}; report may be incomplete.")
+            open_alerts = open_alerts[:max_total]
+            break
+        if max_pages and page >= max_pages and url:
+            print(f"[Dependabot] WARNING: Reached max_pages {max_pages}; report may be incomplete.")
+            break
     print(f"[Dependabot] Fetched {len(open_alerts)} open alerts.")
-    if max_total and len(open_alerts) > max_total:
-        open_alerts = open_alerts[:max_total]
-        print(f"[Dependabot] Truncated to max_total {max_total} alerts.")
     return open_alerts
 
 # ============================================================================

@@ -15,7 +15,7 @@ The application consists of the following main components:
 ## Manual Trigger a renewal 
 kubectl exec -i -n gitauth deploy/githubuserauthcontainer -- sh -c 'cd / && python3 -' <<'EOF'
 import approvals as a
-EMAIL = "yujun.guo@noaa.gov"
+EMAIL = "yujun.guo@noaa.gov"git 
 a._needs_renewal = lambda user, now: user.email == EMAIL
 a.check_for_renewals()
 EOF
